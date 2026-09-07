@@ -1,7 +1,7 @@
 // Bump this on every deploy so installed phones pick up the new version.
-const VERSI = 'v1';
+const VERSI = 'v2';
 const CACHE = 'cekstok-' + VERSI;
-const SHELL = ['./', './index.html', './config.js', './app.js', './manifest.webmanifest'];
+const SHELL = ['./', './index.html', './styles.css', './config.js', './app.js', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
