@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://cdn.jsdelivr.net;">
+<title>Cek Stok</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2E251D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cek Stok">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBF6EF; --card:#FFFFFF; --ink:#3D3229; --pen:#D97757; --pen-soft:#FBEAE0;
+  --stamp:#D6584C; --rule:#EFE4D6; --rule-soft:#F6EFE5; --muted:#93816F;
+  --sans:'Nunito',system-ui,sans-serif;
+  --r-lg:18px; --r-md:12px; --r-pill:999px;
+  --shadow-lg:0 18px 44px rgba(61,50,41,.18);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input{font:inherit;color:inherit}
+
+.login-screen{position:fixed;inset:0;background:linear-gradient(160deg,#4A392C,#2E251D);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.login-screen[hidden]{display:none}
+.login-card{background:var(--card);border-radius:var(--r-lg);padding:30px 26px;width:100%;max-width:320px;box-shadow:var(--shadow-lg)}
+.login-card b{font-size:22px;font-weight:800;display:block;text-align:center;margin-bottom:20px;letter-spacing:-.01em}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.inp{width:100%;padding:11px 13px;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--paper)}
+.inp:focus{outline:none;border-color:var(--pen);box-shadow:0 0 0 3px var(--pen-soft);background:var(--card)}
+.btn{appearance:none;border:1px solid var(--pen);background:var(--pen);color:#fff;font-weight:700;font-size:15px;padding:11px 16px;border-radius:var(--r-pill);cursor:pointer;width:100%}
+.btn:hover{background:#C4633F;border-color:#C4633F}
+.btn:disabled{opacity:.5}
+.hint{font-size:13px;color:var(--muted);margin-top:9px}
+.hint.bad{color:var(--stamp)}
+
+header{background:var(--ink);color:#FBF6EF;padding:14px 18px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+header b{font-size:18px;font-weight:800;letter-spacing:-.01em}
+header .spacer{margin-left:auto}
+header button{appearance:none;background:rgba(255,255,255,.1);border:0;color:#F3E9DD;border-radius:var(--r-pill);padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer}
+header button:hover{background:rgba(255,255,255,.18)}
+
+main{max-width:640px;margin:0 auto;padding:16px 16px 60px}
+.search{position:sticky;top:53px;background:var(--paper);padding:12px 0;z-index:9}
+.search input{width:100%;padding:12px 14px;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--card);font-size:15px}
+.search input:focus{outline:none;border-color:var(--pen);box-shadow:0 0 0 3px var(--pen-soft)}
+
+.item{background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 10px rgba(96,68,44,.06)}
+.item .nm{font-weight:700;font-size:15px}
+.item .sku{font-size:12px;color:var(--muted);margin-top:2px}
+.item .tot{font-size:24px;font-weight:800;margin-top:8px;font-variant-numeric:tabular-nums}
+.item .tot.zero{color:var(--stamp)}
+.item .lok{display:flex;justify-content:space-between;font-size:13.5px;color:var(--muted);border-top:1px solid var(--rule-soft);margin-top:10px;padding-top:8px}
+.item .lok + .lok{border-top:0;padding-top:3px;margin-top:3px}
+.item .lok b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+.empty{text-align:center;color:var(--muted);padding:44px 16px}
+.empty b{display:block;font-size:16px;font-weight:800;color:var(--ink);margin-bottom:5px}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <b>Cek Stok</b>
+    <div class="field"><label>Nama login</label><input class="inp" id="loginId" autocomplete="off" autocapitalize="off"></div>
+    <div class="field"><label>Kata sandi</label><input class="inp" type="password" id="loginPassword" autocomplete="off"></div>
+    <button class="btn" id="btnLogin">Masuk</button>
+    <p class="hint" id="loginHint"></p>
+  </div>
+</div>
+
+<div id="appShell" hidden>
+  <header>
+    <b>Cek Stok</b>
+    <span class="spacer"></span>
+    <button id="btnKeluar">Keluar</button>
+  </header>
+  <main>
+    <div class="search"><input id="cari" placeholder="Cari kode, merek, tipe…"></div>
+    <div id="list"></div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
