@@ -150,7 +150,7 @@ function mulaiPenyegar() {
   }, 20000);
 }
 async function muatStok() {
-  const { data, error } = await sb.from('v_stok_tersedia').select('*').order('sku');
+  const { data, error } = await sb.from('v_stok_tersedia').select('*').order('sku').order('lokasi_urutan');
   if (error) {
     $('list').innerHTML = `<div class="empty"><b>Tidak bisa memuat stok</b>${esc(error.message)}</div>`;
     return;
