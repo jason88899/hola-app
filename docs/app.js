@@ -116,6 +116,7 @@ function setHint(msg, bad) {
 }
 
 async function doLogout() {
+  if (penyegar) { clearInterval(penyegar); penyegar = null; }
   try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
   rows = [];
   $('appShell').hidden = true;
@@ -127,8 +128,27 @@ async function enterApp() {
   $('loginScreen').hidden = true;
   $('appShell').hidden = false;
   await muatStok();
+  mulaiPenyegar();
 }
 
+// A salesman may keep the page open for hours: without this the numbers he
+// quotes are whatever was true when he logged in.
+let penyegar = null, stempelTerakhir = null;
+function mulaiPenyegar() {
+  if (penyegar) clearInterval(penyegar);
+  stempelTerakhir = null;
+  penyegar = setInterval(async () => {
+    if (!navigator.onLine) return;
+    try {
+      const { data, error } = await sb.rpc('stempel_data');
+      if (error || typeof data !== 'string') return;
+      if (stempelTerakhir === null) { stempelTerakhir = data; return; }
+      if (data === stempelTerakhir) return;
+      stempelTerakhir = data;
+      await muatStok();
+    } catch (e) { /* next tick */ }
+  }, 20000);
+}
 async function muatStok() {
   const { data, error } = await sb.from('v_stok_tersedia').select('*').order('sku');
   if (error) {
