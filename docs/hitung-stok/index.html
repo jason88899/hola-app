@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self';">
+<title>Hitung Stok</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3D3229">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hitung Stok">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== Beranda: daftar hitungan ===== -->
+<section id="pBeranda">
+  <header>
+    <b>Hitung Stok</b>
+    <span class="spacer"></span>
+    <button id="btnBaru" class="primary">+ Hitungan baru</button>
+  </header>
+  <main>
+    <div id="daftarSesi"></div>
+  </main>
+</section>
+
+<!-- ===== Baru: buat hitungan + isi daftar barang ===== -->
+<section id="pBaru" hidden>
+  <header>
+    <button id="btnBaruKembali" class="icon" aria-label="Kembali">‹</button>
+    <div class="hd-title"><b>Hitungan baru</b></div>
+    <span class="spacer"></span>
+  </header>
+  <main>
+    <div class="card">
+      <div class="field"><label>Nama hitungan</label><input class="inp" id="bNama" placeholder="mis. Toko A, Rak 1, Gudang belakang"></div>
+      <div class="field"><label>Tanggal</label><input class="inp" type="date" id="bTgl"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Daftar barang</div>
+      <div class="tabs">
+        <button class="tab on" data-t="ketik">Ketik</button>
+        <button class="tab" data-t="impor">Impor file</button>
+        <button class="tab" data-t="salin" id="tabSalin" hidden>Dari hitungan lain</button>
+      </div>
+
+      <div id="srcKetik">
+        <p class="hint">Satu barang per baris. Boleh <b>Nama</b> saja, atau <b>Kode ; Nama</b>, atau <b>Kode ; Nama ; Stok sistem</b> (pemisah: titik koma, tab, atau |).</p>
+        <textarea class="inp" id="bTeks" rows="9" placeholder="Sepatu A 40 Hitam&#10;SKU-002 ; Sepatu B 41 Putih&#10;SKU-003 ; Sepatu C 42 Coklat ; 12"></textarea>
+      </div>
+
+      <div id="srcImpor" hidden>
+        <p class="hint">Excel (.xlsx/.xls) atau CSV. Kolom dikenali dari judulnya: <b>Kode/SKU</b>, <b>Nama/Barang</b>, dan opsional <b>Stok/Sistem</b>. Tanpa judul: kolom pertama = kode, kedua = nama.</p>
+        <input type="file" id="bFile" accept=".xlsx,.xls,.csv,.txt" hidden>
+        <button class="btn ghost" id="btnPilihFile">Pilih file…</button>
+        <p class="hint" id="bFileInfo"></p>
+      </div>
+
+      <div id="srcSalin" hidden>
+        <p class="hint">Pakai daftar barang dari hitungan sebelumnya (angka hitungan tidak ikut).</p>
+        <select class="inp" id="bSumber"></select>
+      </div>
+
+      <p class="hint" id="bPratinjau"></p>
+    </div>
+
+    <button class="btn" id="btnBuat">Buat &amp; mulai menghitung</button>
+    <p class="hint bad" id="bHint"></p>
+  </main>
+</section>
+
+<!-- ===== Hitung: daftar barang dengan tombol − / + ===== -->
+<section id="pHitung" hidden>
+  <header>
+    <button id="btnKeBeranda" class="icon" aria-label="Kembali">‹</button>
+    <div class="hd-title">
+      <b id="hNama">—</b>
+      <small id="hProgres">0 / 0 dihitung</small>
+    </div>
+    <span class="spacer"></span>
+    <button id="btnUrungkan" disabled>Urungkan</button>
+    <button id="btnSelesai" class="primary">Selesai</button>
+  </header>
+  <main>
+    <div class="lantai" id="segLantai">
+      <button class="on" data-l="1">Lantai 1</button>
+      <button data-l="2">Lantai 2</button>
+    </div>
+    <div class="search"><input id="cari" placeholder="Cari kode / nama…" autocomplete="off"></div>
+    <div class="chips">
+      <button class="chip on" data-f="semua">Semua</button>
+      <button class="chip" data-f="belum">Belum</button>
+      <button class="chip" data-f="sudah">Sudah</button>
+      <button class="chip" data-f="selisih" id="chipSelisih" hidden>Selisih</button>
+      <span class="spacer"></span>
+      <button class="chip" id="btnLihat" hidden>Stok sistem: sembunyi</button>
+    </div>
+    <div id="list"></div>
+    <button class="btn ghost" id="btnTambahBarang">+ Tambah barang</button>
+
+    <div class="card" id="riwayat" hidden>
+      <div class="card-head">
+        <div class="card-title" id="riwayatJudul">Riwayat</div>
+        <button class="chip" id="btnHapusRiwayat">Kosongkan</button>
+      </div>
+      <div id="riwayatIsi"></div>
+    </div>
+  </main>
+</section>
+
+<!-- ===== Selesai: ringkasan, unduh ===== -->
+<section id="pSelesai" hidden>
+  <header>
+    <button id="btnKeHitung" class="icon" aria-label="Kembali">‹</button>
+    <div class="hd-title"><b>Ringkasan</b><small id="sSub"></small></div>
+    <span class="spacer"></span>
+  </header>
+  <main>
+    <div class="card">
+      <div class="stat-row">
+        <div class="stat"><small>Dihitung</small><b id="sDihitung">0</b></div>
+        <div class="stat"><small>Belum</small><b id="sBelum">0</b></div>
+        <div class="stat"><small>Lantai 1</small><b id="sL1">0</b></div>
+        <div class="stat"><small>Lantai 2</small><b id="sL2">0</b></div>
+        <div class="stat total"><small>Total keseluruhan</small><b id="sUnit">0</b></div>
+        <div class="stat" id="statSelisih" hidden><small>Selisih</small><b id="sSelisih">0</b></div>
+      </div>
+      <p class="hint" id="sCatatan"></p>
+    </div>
+
+    <div class="card" id="kartuSelisih" hidden>
+      <div class="card-title">Barang yang selisih</div>
+      <div id="tblSelisih"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Simpan hasil</div>
+      <div class="stack-btn">
+        <button class="btn" id="btnUnduhXlsx">Unduh Excel (.xlsx)</button>
+        <button class="btn ghost" id="btnUnduhCsv">Unduh CSV</button>
+        <button class="btn ghost" id="btnBagikan" hidden>Bagikan file…</button>
+      </div>
+    </div>
+
+    <div class="card danger">
+      <div class="card-title">Hapus hitungan ini</div>
+      <p class="hint">Semua angka hitungan ini akan hilang dari HP. Lakukan setelah hasilnya diunduh.</p>
+      <button class="btn ghost" id="btnHapusSesi">Hapus hitungan</button>
+    </div>
+  </main>
+</section>
+
+<div id="toast" hidden></div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
