@@ -55,6 +55,21 @@ main{max-width:640px;margin:0 auto;padding:16px 16px 80px}
 .sesi .info{flex:1;min-width:0}
 .sesi .nm{font-weight:800;font-size:15px}
 .sesi .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.semua{background:var(--ink,#3D3229);color:#fff;border-radius:var(--r-lg);padding:14px 16px;margin-bottom:12px}
+.semua .nm{font-weight:800;font-size:15px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.semua .nm small{font-weight:600;font-size:12px;opacity:.65}
+.semua .tot{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:13px;opacity:.85;font-variant-numeric:tabular-nums}
+.semua .tot b{font-size:18px;font-weight:800;opacity:1;margin-left:2px}
+.semua .tot .all b{color:var(--pen,#D97757)}
+.semua{cursor:pointer}
+.semua:active{opacity:.85}
+.semua .lihat{margin-top:8px;font-size:12.5px;font-weight:700;color:var(--pen,#D97757)}
+.sel-row.g .nm .asal{color:var(--muted);font-weight:600;margin-top:2px;white-space:normal}
+.sel-row.g .nm .asal b{color:var(--ink)}
+.sel-row.g .k.tot b{color:var(--pen,#D97757)}
+.sesi .tot{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sesi .tot b{color:var(--ink);font-weight:800}
+.sesi .tot .all b{color:var(--pen,#D97757)}
 .sesi .bar{height:5px;background:var(--rule-soft);border-radius:3px;margin-top:8px;overflow:hidden}
 .sesi .bar i{display:block;height:100%;background:var(--ok);border-radius:3px}
 .sesi .pct{font-size:13px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -134,6 +149,7 @@ main{max-width:640px;margin:0 auto;padding:16px 16px 80px}
 /* floor switch */
 .lantai{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--rule-soft,#F6EFE5);border-radius:var(--r-pill);padding:4px;margin-bottom:10px}
 .lantai button{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:800;font-size:14px;padding:10px;border-radius:var(--r-pill);cursor:pointer}
+.lantai button small{display:block;font-size:11.5px;font-weight:700;opacity:.75;margin-top:1px}
 .lantai button.on{background:var(--pen,#D97757);color:#fff}
 .item .lt{font-size:12px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
 .item .lt b{color:var(--ink)}
