@@ -1,5 +1,5 @@
 // Bump this on every deploy so installed phones pick up the new version.
-const VERSI = 'v4';
+const VERSI = 'v5';
 const CACHE = 'hitungstok-' + VERSI;
 const SHELL = ['./', './index.html', './styles.css', './app.js', './vendor/xlsx.full.min.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
