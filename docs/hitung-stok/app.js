@@ -37,7 +37,7 @@ const konfirmasi = msg => window.confirm(msg);
 const punyaSistem = () => !!sesi && sesi.items.some(it => it.sistem !== null && it.sistem !== undefined);
 
 function tampil(id) {
-  ['pBeranda', 'pBaru', 'pHitung', 'pSelesai'].forEach(p => { $(p).hidden = p !== id; });
+  ['pBeranda', 'pSemua', 'pBaru', 'pHitung', 'pSelesai'].forEach(p => { $(p).hidden = p !== id; });
   window.scrollTo(0, 0);
   if (id === 'pHitung') mintaWakeLock(); else lepasWakeLock();
 }
@@ -71,6 +71,13 @@ function hapusSesiId(id) {
   simpan(K_DAFTAR, daftar().filter(x => x.id !== id));
 }
 
+// Units per floor plus the grand total, for any session (the home page
+// lists sessions that are not the open one). Order matches LANTAI.
+function totalLantai(s) {
+  const per = LANTAI.map(l => Object.values(s.hitung || {}).reduce((t, rec) => t + (Number(rec[l]) || 0), 0));
+  return { per, total: per.reduce((a, b) => a + b, 0) };
+}
+
 /* ---------- beranda ---------- */
 function renderBeranda() {
   const d = daftar();
@@ -79,21 +86,85 @@ function renderBeranda() {
     box.innerHTML = `<div class="empty"><b>Belum ada hitungan</b>Tekan "+ Hitungan baru", isi daftar barang, lalu hitung dengan tombol − dan +.</div>`;
     return;
   }
-  box.innerHTML = d.map(x => {
+  // One line across every count on this phone (Rak Kiri + Rak Kanan + ...),
+  // per floor and overall -- the per-card numbers are that card only.
+  const semua = LANTAI.map(() => 0); let semuaTotal = 0;
+  d.forEach(x => { const s = muatSesi(x.id); if (!s) return; const t = totalLantai(s); t.per.forEach((v, i) => semua[i] += v); semuaTotal += t.total; });
+  const kartuSemua = d.length > 1 ? `<div class="semua" data-semua>
+      <div class="nm">Semua hitungan <small>${num(d.length)} hitungan digabung</small></div>
+      <div class="tot">${LANTAI.map((l, i) => `<span>Lantai ${l} <b>${num(semua[i])}</b></span>`).join('')}<span class="all">Total <b>${num(semuaTotal)}</b></span></div>
+      <div class="lihat">Lihat per barang ›</div>
+    </div>` : '';
+  box.innerHTML = kartuSemua + d.map(x => {
     const s = muatSesi(x.id);
     const total = s ? s.items.length : 0;
     const n = s ? Object.keys(s.hitung).length : 0;
     const pct = total ? Math.round(n * 100 / total) : 0;
+    const tl = s ? totalLantai(s) : { per: LANTAI.map(() => 0), total: 0 };
     return `<div class="sesi${n && n === total ? ' done' : ''}" data-id="${esc(x.id)}">
       <div class="info">
         <div class="nm">${esc(x.nama)}</div>
         <div class="sub">${esc(x.tanggal)} · ${num(total)} barang · ${num(n)} dihitung</div>
+        <div class="tot">${LANTAI.map((l, i) => `<span>Lantai ${l} <b>${num(tl.per[i])}</b></span>`).join('')}<span class="all">Total <b>${num(tl.total)}</b></span></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
       </div>
       <div class="pct">${pct}%</div>
       <button class="hapus" data-hapus="${esc(x.id)}" aria-label="Hapus ${esc(x.nama)}" title="Hapus">🗑</button>
     </div>`;
   }).join('');
+}
+
+/* ---------- semua hitungan: satu baris per barang, digabung antar rak ---------- */
+// Merged by kode when there is one, else by name -- the same shoe on Rak
+// Kiri and Rak Kanan is one line, with a breakdown of where it was found.
+function gabungSemua() {
+  const peta = new Map();
+  daftar().forEach(x => {
+    const s = muatSesi(x.id); if (!s) return;
+    s.items.forEach(it => {
+      const kunci = it.kode ? 'k:' + it.kode.trim().toUpperCase() : 'n:' + it.nama.trim().toLowerCase();
+      let g = peta.get(kunci);
+      if (!g) { g = { kode: it.kode, nama: it.nama, per: LANTAI.map(() => 0), total: 0, asal: [] }; peta.set(kunci, g); }
+      const rec = s.hitung[it.id]; if (!rec) return;
+      let sub = 0;
+      LANTAI.forEach((l, i) => { const v = Number(rec[l]) || 0; g.per[i] += v; sub += v; });
+      g.total += sub;
+      g.asal.push({ nama: s.nama, qty: sub });
+    });
+  });
+  return [...peta.values()].sort((a, b) => (a.kode || a.nama).localeCompare(b.kode || b.nama, 'id'));
+}
+let gabungan = [];
+function bukaSemua() {
+  gabungan = gabungSemua();
+  const d = daftar();
+  const per = LANTAI.map((_, i) => gabungan.reduce((t, g) => t + g.per[i], 0));
+  $('gSub').textContent = `${num(d.length)} hitungan · ${num(gabungan.length)} barang`;
+  $('gL1').textContent = num(per[0]); $('gL2').textContent = num(per[1]);
+  $('gUnit').textContent = num(per.reduce((a, b) => a + b, 0));
+  $('gCari').value = '';
+  renderSemua();
+  tampil('pSemua');
+}
+function renderSemua() {
+  const q = $('gCari').value.trim().toLowerCase();
+  const rows = gabungan.filter(g => !q || ((g.kode || '') + ' ' + g.nama).toLowerCase().includes(q));
+  $('gList').innerHTML = rows.length
+    ? `<div class="card">` + rows.map(g => `<div class="sel-row g">
+        <div class="nm">${esc(g.nama)}${g.kode ? `<small>${esc(g.kode)}</small>` : ''}<small class="asal">${g.asal.length ? g.asal.map(a => `${esc(a.nama)} <b>${num(a.qty)}</b>`).join(' · ') : 'belum dihitung'}</small></div>
+        ${LANTAI.map((l, i) => `<div class="k">lantai ${l}<b>${num(g.per[i])}</b></div>`).join('')}
+        <div class="k tot">total<b>${num(g.total)}</b></div></div>`).join('') + '</div>'
+    : `<div class="empty"><b>Tidak ada barang</b>${gabungan.length ? 'Coba kata kunci lain.' : 'Belum ada barang di hitungan mana pun.'}</div>`;
+}
+// Excel of the merged list: just the item and its grand total -- no
+// per-floor or per-rack columns, this is the sheet that gets handed on.
+function unduhSemua() {
+  const rows = gabungan.map(g => ({ Kode: g.kode, Barang: g.nama, Fisik: g.total }));
+  if (!rows.length) return toast('Belum ada barang untuk diunduh.', true);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Semua hitungan');
+  unduh(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: MIME_XLSX }), `hitung-stok-semua-${today()}.xlsx`);
 }
 
 /* ---------- baru ---------- */
@@ -287,7 +358,12 @@ function renderList() {
 }
 function renderProgres() {
   const n = Object.keys(sesi.hitung).length;
-  $('hProgres').textContent = `${n} / ${sesi.items.length} dihitung`;
+  const tl = totalLantai(sesi);
+  $('hProgres').textContent = `${n} / ${sesi.items.length} dihitung · total ${num(tl.total)} unit`;
+  document.querySelectorAll('#segLantai button').forEach(b => {
+    const i = LANTAI.indexOf(Number(b.dataset.l));
+    b.innerHTML = `Lantai ${esc(b.dataset.l)} <small>${num(tl.per[i])} unit</small>`;
+  });
   $('btnUrungkan').disabled = !sesi.urung.length;
 }
 // Re-draw one card in place rather than the whole list, so a press never
@@ -422,8 +498,8 @@ function ringkas() {
   return {
     isi,
     belum: sesi.items.filter(it => !sudah(it)),
-    unit: isi.reduce((s, it) => s + fisik(it), 0),
-    lantai: LANTAI.map(l => isi.reduce((s, it) => s + (fisikLantai(it, l) || 0), 0)),
+    unit: totalLantai(sesi).total,
+    lantai: totalLantai(sesi).per,
     beda: isi.filter(it => punyaSis(it) && fisik(it) !== it.sistem)
   };
 }
@@ -520,6 +596,7 @@ function hapusSesi() {
       }
       return;
     }
+    if (e.target.closest('[data-semua]')) return bukaSemua();
     const el = e.target.closest('.sesi');
     if (!el) return;
     const s = muatSesi(el.dataset.id);
@@ -529,6 +606,9 @@ function hapusSesi() {
   };
 
   $('btnBaruKembali').onclick = () => { renderBeranda(); tampil('pBeranda'); };
+  $('btnSemuaKembali').onclick = () => { renderBeranda(); tampil('pBeranda'); };
+  $('gCari').oninput = renderSemua;
+  $('btnUnduhSemua').onclick = unduhSemua;
   document.querySelectorAll('.tab[data-t]').forEach(b => { b.onclick = () => pilihSumber(b.dataset.t); });
   $('bTeks').oninput = pratinjau;
   $('bSumber').onchange = pratinjau;
