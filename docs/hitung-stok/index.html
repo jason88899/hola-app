@@ -25,6 +25,28 @@
   </main>
 </section>
 
+<!-- ===== Semua: gabungan semua hitungan, per barang ===== -->
+<section id="pSemua" hidden>
+  <header>
+    <button id="btnSemuaKembali" class="icon" aria-label="Kembali">‹</button>
+    <div class="hd-title"><b>Semua hitungan</b><small id="gSub"></small></div>
+    <span class="spacer"></span>
+    <button id="btnUnduhSemua">Unduh Excel</button>
+  </header>
+  <main>
+    <div class="card">
+      <div class="stat-row">
+        <div class="stat"><small>Lantai 1</small><b id="gL1">0</b></div>
+        <div class="stat"><small>Lantai 2</small><b id="gL2">0</b></div>
+        <div class="stat total"><small>Total</small><b id="gUnit">0</b></div>
+      </div>
+      <p class="hint">Barang dengan kode (atau nama) yang sama di beberapa hitungan digabung jadi satu baris.</p>
+    </div>
+    <div class="search"><input id="gCari" placeholder="Cari kode / nama…" autocomplete="off"></div>
+    <div id="gList"></div>
+  </main>
+</section>
+
 <!-- ===== Baru: buat hitungan + isi daftar barang ===== -->
 <section id="pBaru" hidden>
   <header>
