@@ -221,9 +221,41 @@ function semuaItem() {
     lebih: it.lokasi.some(l => l.lebih)
   }));
 }
+// The catalogue at the top: one tile per brand, with how many items and
+// units it has right now. Tapping a tile is the same as picking that brand
+// in the dropdown -- the tiles are a friendlier front for the same filter.
+function renderKatalog(semua) {
+  const box = $('katalog');
+  const perMerek = new Map();
+  semua.forEach(it => {
+    const m = String(it.merek ?? '').trim(); if (!m) return;
+    const g = perMerek.get(m) || { n: 0, unit: 0, lebih: false };
+    g.n++; g.unit += it.total; g.lebih = g.lebih || it.lebih;
+    perMerek.set(m, g);
+  });
+  const merek = [...perMerek.keys()].sort((a, b) => a.localeCompare(b, 'id'));
+  box.hidden = merek.length < 2;
+  if (box.hidden) return;
+  const cur = $('fMerek').value;
+  const totN = semua.length, totU = semua.reduce((t, it) => t + it.total, 0), totL = semua.some(it => it.lebih);
+  box.innerHTML = `<div class="judul">Katalog merek</div><div class="grid">
+    <button class="tile semua${cur ? '' : ' on'}" data-merek=""><b>Semua</b><small>${num(totN)} barang · ${num(totU)}${totL ? '+' : ''} unit</small></button>` +
+    merek.map(m => { const g = perMerek.get(m); return `<button class="tile${m === cur ? ' on' : ''}" data-merek="${esc(m)}"><b>${esc(m)}</b><small>${num(g.n)} barang · ${num(g.unit)}${g.lebih ? '+' : ''} unit</small></button>`; }).join('') +
+    '</div>';
+  box.querySelectorAll('[data-merek]').forEach(b => {
+    b.onclick = () => {
+      // A new brand wipes the narrower choices, which belonged to the old one.
+      $('fMerek').value = b.dataset.merek;
+      ['fKategori', 'fTipe', 'fUkuran', 'fWarna'].forEach(id => { $(id).value = ''; });
+      render();
+      $('cari').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  });
+}
 function render() {
   const q = $('cari').value.trim().toLowerCase();
   const semua = semuaItem();
+  renderKatalog(semua);
   isiFilter(semua);
   const f = nilaiFilter();
   const adaFilter = FILTER.some(([, k]) => f[k]);
