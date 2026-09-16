@@ -117,6 +117,7 @@ function setHint(msg, bad) {
 
 async function doLogout() {
   if (penyegar) { clearInterval(penyegar); penyegar = null; }
+  if (pengawas) { clearInterval(pengawas); pengawas = null; }
   try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
   rows = [];
   $('appShell').hidden = true;
@@ -129,6 +130,32 @@ async function enterApp() {
   $('appShell').hidden = false;
   await muatStok();
   mulaiPenyegar();
+  mulaiPengawasSesi();
+}
+
+// Same as the desktop app: when Master changes this account (a location
+// added or taken away, the phone blocked, the account deleted) the open
+// page must not keep showing what was true at login. The server already
+// refuses the old scope on the next read; this makes that visible by
+// sending the salesman back to the login screen with a reason.
+let pengawas = null, metaAwal = null;
+function mulaiPengawasSesi() {
+  if (pengawas) clearInterval(pengawas);
+  metaAwal = null;
+  pengawas = setInterval(async () => {
+    if (!navigator.onLine) return;
+    try {
+      const { data, error } = await sb.auth.getUser();
+      if (error || !data?.user) { await paksaKeluar('Sesi Anda sudah tidak berlaku. Silakan masuk kembali.'); return; }
+      const meta = JSON.stringify(data.user.app_metadata || {});
+      if (metaAwal === null) { metaAwal = meta; return; }
+      if (meta !== metaAwal) await paksaKeluar('Akses Anda baru saja diubah oleh Master. Silakan masuk kembali.');
+    } catch (e) { /* transient -- next tick */ }
+  }, 15000);
+}
+async function paksaKeluar(pesan) {
+  await doLogout();
+  setHint(pesan, true);
 }
 
 // A salesman may keep the page open for hours: without this the numbers he
