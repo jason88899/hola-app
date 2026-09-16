@@ -186,25 +186,63 @@ async function muatStok() {
   render();
 }
 
-function render() {
-  const q = $('cari').value.trim().toLowerCase();
+// Narrowing by attribute: pick a brand and the other dropdowns only offer
+// what that brand actually has (sizes, colours...), the same way the
+// desktop's item filters work. Each dropdown lists the values that exist
+// among items matching every OTHER active filter.
+const FILTER = [['fKategori', 'kategori', 'Semua kategori'], ['fMerek', 'merek', 'Semua merek'],
+  ['fTipe', 'tipe', 'Semua tipe'], ['fUkuran', 'ukuran', 'Semua ukuran'], ['fWarna', 'warna', 'Semua warna']];
+const nilaiFilter = () => Object.fromEntries(FILTER.map(([id, k]) => [k, $(id).value]));
+const cocokFilter = (it, f, kecuali) => FILTER.every(([, k]) => k === kecuali || !f[k] || String(it[k] ?? '').trim() === f[k]);
+function isiFilter(items) {
+  const f = nilaiFilter();
+  FILTER.forEach(([id, k, label]) => {
+    const ada = [...new Set(items.filter(it => cocokFilter(it, f, k)).map(it => String(it[k] ?? '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+    const sel = $(id);
+    const cur = ada.includes(f[k]) ? f[k] : '';
+    sel.innerHTML = `<option value="">${esc(label)}</option>` + ada.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+    sel.classList.toggle('on', !!cur);
+    // hide a dropdown that has nothing to offer (e.g. no categories set)
+    sel.hidden = !ada.length && !cur;
+  });
+  $('btnResetFilter').hidden = !FILTER.some(([id]) => $(id).value);
+}
+function semuaItem() {
   const byItem = new Map();
   rows.forEach(r => {
     if (!byItem.has(r.barang_id)) byItem.set(r.barang_id, { ...r, lokasi: [] });
     byItem.get(r.barang_id).lokasi.push({ nama: r.lokasi_nama, stok: r.stok, lebih: r.lebih });
   });
   // Any location capped at 50 makes the item's total a '+' figure too.
-  let items = [...byItem.values()].map(it => ({
+  return [...byItem.values()].map(it => ({
     ...it,
     total: it.lokasi.reduce((s, l) => s + Number(l.stok), 0),
     lebih: it.lokasi.some(l => l.lebih)
   }));
+}
+function render() {
+  const q = $('cari').value.trim().toLowerCase();
+  const semua = semuaItem();
+  isiFilter(semua);
+  const f = nilaiFilter();
+  const adaFilter = FILTER.some(([, k]) => f[k]);
+  let items = semua.filter(it => cocokFilter(it, f));
   if (q) items = items.filter(it => (it.sku + ' ' + namaBarang(it)).toLowerCase().includes(q));
   items.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
 
+  // With a filter on, the sum of what is listed is the useful number --
+  // "how many of brand X do we have" -- so it gets a line of its own.
+  const ringkas = $('ringkas');
+  ringkas.hidden = !adaFilter || !items.length;
+  if (adaFilter && items.length) {
+    const tot = items.reduce((s, it) => s + it.total, 0), lebih = items.some(it => it.lebih);
+    ringkas.innerHTML = `<span>${esc(FILTER.map(([, k]) => f[k]).filter(Boolean).join(' · '))} — ${num(items.length)} barang</span><b>${num(tot)}${lebih ? '+' : ''} unit</b>`;
+  }
+
   const list = $('list');
   if (!items.length) {
-    list.innerHTML = `<div class="empty"><b>Tidak ada barang</b>${rows.length ? 'Coba kata kunci lain.' : 'Belum ada data stok untuk lokasi yang bisa Anda lihat.'}</div>`;
+    list.innerHTML = `<div class="empty"><b>Tidak ada barang</b>${rows.length ? (adaFilter ? 'Tidak ada stok dengan pilihan itu. Coba longgarkan filternya.' : 'Coba kata kunci lain.') : 'Belum ada data stok untuk lokasi yang bisa Anda lihat.'}</div>`;
     return;
   }
   list.innerHTML = items.map(it => `
@@ -220,6 +258,8 @@ function render() {
 (async function start() {
   wireLogin();
   $('cari').oninput = render;
+  FILTER.forEach(([id]) => { $(id).onchange = render; });
+  $('btnResetFilter').onclick = () => { FILTER.forEach(([id]) => { $(id).value = ''; }); render(); };
   $('btnKeluar').onclick = doLogout;
   try {
     await initSupabase();
