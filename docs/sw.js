@@ -1,7 +1,9 @@
 // Bump this on every deploy so installed phones pick up the new version.
-const VERSI = 'v8';
+const VERSI = 'v9';
 const CACHE = 'cekstok-' + VERSI;
 const SHELL = ['./', './index.html', './styles.css', './config.js', './app.js', './manifest.webmanifest'];
+// Catalogue pages are static images: cached on first view (see fetch below),
+// not precached, so installing the app stays quick on a slow connection.
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
@@ -21,7 +23,11 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
+  const katalog = url.pathname.includes('/katalog/');
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request))
+    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+      if (katalog && res.ok) { const salinan = res.clone(); caches.open(CACHE).then(c => c.put(e.request, salinan)); }
+      return res;
+    }))
   );
 });
