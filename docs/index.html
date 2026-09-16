@@ -33,6 +33,10 @@
     <button id="btnKeluar">Keluar</button>
   </header>
   <main>
+    <div class="ekatalog" id="ekatalog">
+      <div class="judul"><b id="ekJudul">Katalog</b><span id="ekSub"></span></div>
+      <div class="strip" id="ekStrip"></div>
+    </div>
     <div class="katalog" id="katalog" hidden></div>
     <div class="search"><input id="cari" placeholder="Cari kode, merek, tipe…"></div>
     <div class="filters">
@@ -46,6 +50,16 @@
     <div class="ringkas" id="ringkas" hidden></div>
     <div id="list"></div>
   </main>
+</div>
+
+<div id="ekViewer" class="viewer" hidden>
+  <header>
+    <button id="ekTutup" class="icon" aria-label="Tutup">‹</button>
+    <b id="ekViewerJudul">Katalog</b>
+    <span class="spacer"></span>
+    <span id="ekHal" class="hal"></span>
+  </header>
+  <div class="pages" id="ekPages"></div>
 </div>
 
 <script src="config.js"></script>
