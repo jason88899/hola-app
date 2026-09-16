@@ -128,6 +128,7 @@ async function doLogout() {
 async function enterApp() {
   $('loginScreen').hidden = true;
   $('appShell').hidden = false;
+  siapkanKatalog();
   await muatStok();
   mulaiPenyegar();
   mulaiPengawasSesi();
@@ -221,7 +222,45 @@ function semuaItem() {
     lebih: it.lokasi.some(l => l.lebih)
   }));
 }
-// The catalogue at the top: one tile per brand, with how many items and
+// The printed catalogue, as page images, at the very top: a strip of
+// pages to flick through, tap one to read it full screen. Pure static
+// files -- swap the images in /katalog and bump HALAMAN to update it.
+const KATALOG = { judul: 'Katalog Colorado 2026', halaman: 11, berkas: n => `katalog/hal-${String(n).padStart(2, '0')}.jpg` };
+let ekSiap = false;
+function siapkanKatalog() {
+  if (ekSiap) return; ekSiap = true;
+  $('ekJudul').textContent = KATALOG.judul;
+  $('ekViewerJudul').textContent = KATALOG.judul;
+  $('ekSub').textContent = `${KATALOG.halaman} halaman · ketuk untuk membaca`;
+  const n = KATALOG.halaman;
+  $('ekStrip').innerHTML = Array.from({ length: n }, (_, i) => i + 1).map(h =>
+    `<button class="pg${h === 1 ? ' cover' : ''}" data-hal="${h}"><img src="${KATALOG.berkas(h)}" alt="Halaman ${h}" loading="lazy"><small>${h === 1 ? 'Sampul' : 'Hal. ' + h}</small></button>`).join('');
+  $('ekPages').innerHTML = Array.from({ length: n }, (_, i) => i + 1).map(h =>
+    `<img src="${KATALOG.berkas(h)}" alt="Halaman ${h}" data-hal="${h}" loading="lazy">`).join('');
+  $('ekStrip').querySelectorAll('[data-hal]').forEach(b => { b.onclick = () => bukaKatalog(Number(b.dataset.hal)); });
+  $('ekTutup').onclick = tutupKatalog;
+  // Which page is on screen, for the counter in the header.
+  const io = new IntersectionObserver(ents => {
+    ents.forEach(e => { if (e.isIntersecting) $('ekHal').textContent = `${e.target.dataset.hal} / ${n}`; });
+  }, { root: $('ekPages'), threshold: 0.5 });
+  $('ekPages').querySelectorAll('img').forEach(img => io.observe(img));
+  // Phone back button closes the viewer instead of leaving the app.
+  window.addEventListener('popstate', () => { if (!$('ekViewer').hidden) tutupKatalog(false); });
+}
+function bukaKatalog(hal) {
+  $('ekViewer').hidden = false;
+  document.body.style.overflow = 'hidden';
+  history.pushState({ katalog: true }, '');
+  const img = $('ekPages').querySelector(`img[data-hal="${hal}"]`);
+  if (img) requestAnimationFrame(() => img.scrollIntoView({ block: 'start' }));
+}
+function tutupKatalog(mundur = true) {
+  $('ekViewer').hidden = true;
+  document.body.style.overflow = '';
+  if (mundur && history.state && history.state.katalog) history.back();
+}
+
+// Stock by brand: one tile per brand, with how many items and
 // units it has right now. Tapping a tile is the same as picking that brand
 // in the dropdown -- the tiles are a friendlier front for the same filter.
 function renderKatalog(semua) {
@@ -238,7 +277,7 @@ function renderKatalog(semua) {
   if (box.hidden) return;
   const cur = $('fMerek').value;
   const totN = semua.length, totU = semua.reduce((t, it) => t + it.total, 0), totL = semua.some(it => it.lebih);
-  box.innerHTML = `<div class="judul">Katalog merek</div><div class="grid">
+  box.innerHTML = `<div class="judul">Stok per merek</div><div class="grid">
     <button class="tile semua${cur ? '' : ' on'}" data-merek=""><b>Semua</b><small>${num(totN)} barang · ${num(totU)}${totL ? '+' : ''} unit</small></button>` +
     merek.map(m => { const g = perMerek.get(m); return `<button class="tile${m === cur ? ' on' : ''}" data-merek="${esc(m)}"><b>${esc(m)}</b><small>${num(g.n)} barang · ${num(g.unit)}${g.lebih ? '+' : ''} unit</small></button>`; }).join('') +
     '</div>';
