@@ -177,8 +177,24 @@ function mulaiPenyegar() {
     } catch (e) { /* next tick */ }
   }, 20000);
 }
+// Supabase answers at most 1,000 rows per request (the API's default
+// "max rows"), silently. The ledger passes that within days, and a single
+// select would then drop the newest entries without a word. Anything that
+// can grow is read page by page, until a page comes back empty -- that works
+// whatever the server's cap happens to be. `buat` returns a fresh query each
+// time (a query builder can only be sent once) with a stable order.
+async function ambilSemua(buat, ukuran = 1000) {
+  const semua = [];
+  for (let dari = 0; ; ) {
+    const { data, error } = await buat().range(dari, dari + ukuran - 1);
+    if (error) return { data: null, error };
+    if (!data || !data.length) return { data: semua, error: null };
+    semua.push(...data);
+    dari += data.length;
+  }
+}
 async function muatStok() {
-  const { data, error } = await sb.from('v_stok_tersedia').select('*').order('sku').order('lokasi_urutan');
+  const { data, error } = await ambilSemua(() => sb.from('v_stok_tersedia').select('*').order('sku').order('lokasi_urutan').order('lokasi_id'));
   if (error) {
     $('list').innerHTML = `<div class="empty"><b>Tidak bisa memuat stok</b>${esc(error.message)}</div>`;
     return;
