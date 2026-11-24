@@ -16,23 +16,19 @@ const PERAN = {
 };
 const TAB = { label: 'Label', masuk: 'Masuk', keluar: 'Keluar', pindah: 'Pindah', hitung: 'Hitung', stok: 'Stok', cari: 'Cari unit', riwayat: 'Riwayat', barang: 'Barang' };
 
-/* Label formats. A4 = sticker sheet grid; nota = receipt printer, one label per page. */
+/* Label format: only the Zebra GT820 label roll (one label per sticker, size set to match the roll). */
 const FORMAT = {
-  'a4-3x8': { nama: 'A4 stiker 3×8 · 24 label (70×37 mm)', a4: true, kol: 3, bar: 8, w: 70, h: 37, atas: 0.5, kiri: 0, jk: 0, jb: 0 },
-  'a4-2x7': { nama: 'A4 stiker 2×7 · 14 label (99×38 mm)', a4: true, kol: 2, bar: 7, w: 99.1, h: 38.1, atas: 15.1, kiri: 4.6, jk: 2.5, jb: 0 },
-  'a4-2x5': { nama: 'A4 kertas biasa 2×5 · 10 label besar (gunting)', a4: true, kol: 2, bar: 5, w: 105, h: 59.3, atas: 0, kiri: 0, jk: 0, jb: 0, garis: true },
-  'roll': { nama: 'Printer label roll (Zebra GT820 dll.) · 1 label per stiker', nota: true, roll: true },
-  'nota-80': { nama: 'Printer kasir 80 mm', nota: true, w: 80, h: 45, isi: 72 },
-  'nota-58': { nama: 'Printer kasir 58 mm', nota: true, w: 58, h: 40, isi: 48 },
+  'roll': { nama: 'Zebra GT820 · label roll', nota: true, roll: true },
 };
 
 /* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
-const UKURAN_ROLL = { w: 60, h: 40 };
+// Default = roll currently in the GT820: 33×15 mm stickers, 3 per row, ~2 mm apart.
+const UKURAN_ROLL = { w: 33, h: 15, kol: 3, jarak: 2, gx: 0, gy: 0 };
 function formatDari(key) {
-  const f = FORMAT[key] || FORMAT['a4-3x8'];
+  const f = FORMAT[key] || FORMAT.roll;
   if (!f.roll) return f;
   const r = { ...UKURAN_ROLL, ...(S && S.roll) };
-  return { ...f, w: r.w, h: r.h, isi: r.w };
+  return { ...f, ...r, isi: r.w };
 }
 
 /* ---------- demo item master (spring bed COLORADO, kategori MATRAS) ---------- */
@@ -358,17 +354,25 @@ function tabLabel() {
     <div class="card-hd"><h2>2. Daftar cetak</h2><span class="sub" id="lTotal"></span>
       <div class="kanan"><button class="btn quiet sm" id="lKosong" type="button">Kosongkan</button></div></div>
     <div class="tbl-wrap" id="lAntri"></div>
-    <div class="row c3" style="margin-top:12px">
-      <label class="f">Kertas<select id="lFormat">${Object.entries(FORMAT).map(([k, f]) => `<option value="${k}" ${k === (S.format || 'a4-3x8') ? 'selected' : ''}>${esc(f.nama)}</option>`).join('')}</select></label>
-      <label class="f" id="lPosWrap">Mulai di kotak ke- (stiker sisa)<input id="lPos" type="number" min="1" value="1" inputmode="numeric"></label>
-      <label class="f" id="lRollWrap">Ukuran stiker di roll (lebar × tinggi, mm)
-        <span style="display:flex;gap:6px;align-items:center"><input id="lRollW" type="number" min="25" max="104" inputmode="numeric"> ×
-        <input id="lRollH" type="number" min="15" max="150" inputmode="numeric"></span></label>
-      <label class="cek"><input type="checkbox" id="lGaris"> Garis potong</label>
+    <p class="hint" id="lZebra" style="font-weight:700">Memeriksa printer Zebra…</p>
+    <div class="row c3" style="margin-top:8px">
+      <label class="f">Printer<input value="Zebra GT820 · label roll" readonly tabindex="-1">
+        <select id="lFormat" hidden><option value="roll" selected>roll</option></select></label>
+      <label class="f" id="lRollWrap">Ukuran 1 stiker (lebar × tinggi, mm)
+        <span style="display:flex;gap:6px;align-items:center"><input id="lRollW" type="number" min="15" max="104" step="0.5" inputmode="decimal"> ×
+        <input id="lRollH" type="number" min="10" max="150" step="0.5" inputmode="decimal"></span></label>
+      <label class="f">Stiker per baris<select id="lKol"><option>1</option><option>2</option><option>3</option></select></label>
+      <label class="f">Jarak antar stiker (mm)<input id="lJarak" type="number" min="0" max="10" step="0.5" inputmode="decimal"></label>
+      <label class="f">Geser kanan × bawah (mm)
+        <span style="display:flex;gap:6px;align-items:center"><input id="lGx" type="number" min="-10" max="10" step="0.5" inputmode="decimal"> ×
+        <input id="lGy" type="number" min="-10" max="10" step="0.5" inputmode="decimal"></span></label>
+      <label class="f" id="lPosWrap" hidden><input id="lPos" type="number" value="1"></label>
+      <label class="cek" hidden><input type="checkbox" id="lGaris"> Garis potong</label>
     </div>
     <button class="btn besar" id="lCetak" disabled>Cetak</button>
-    <p class="hint">Di jendela print pilih <b>Margins: None</b> dan <b>Scale: 100%</b>.
-    Nomor langsung tercatat saat menekan Cetak. Kalau print dibatalkan, label bisa dicetak ulang dengan nomor yang sama.</p>
+    <p class="hint">Label langsung dikirim ke Zebra, tanpa jendela print. Nomor tercatat saat menekan Cetak;
+    kalau ada yang gagal tercetak, cetak ulang dengan nomor yang sama di bawah.
+    Kalau posisi cetakan meleset, atur "Geser" lalu coba cetak 1 label.</p>
   </section>
   <section class="card">
     <div class="card-hd"><h2>Cetak ulang label rusak</h2></div>
@@ -427,7 +431,7 @@ function tabLabel() {
     }).join('')}</tbody></table>` : '<div class="kosong">Belum ada. Pilih barang di atas, isi jumlah, lalu tekan "+ Tambah ke daftar".</div>';
     const per = f.a4 ? f.kol * f.bar : 1, awal = f.a4 ? Math.min(per, Math.max(1, parseInt(pos.value, 10) || 1)) : 1;
     const lembar = total ? Math.ceil((awal - 1 + total) / per) : 0;
-    $('#lTotal').textContent = total ? `${S.antri.length} barang · ${total} label · ${f.a4 ? lembar + ' lembar A4' : total + (f.roll ? ' stiker' : ' potong kertas kasir')}` : '';
+    $('#lTotal').textContent = total ? `${S.antri.length} barang · ${total} label · ${f.a4 ? lembar + ' lembar A4' : total + (f.roll ? ` stiker · ${Math.ceil(total / (f.kol || 1))} baris di roll` : ' potong kertas kasir')}` : '';
     $('#lCetak').disabled = !total;
     $('#lCetak').textContent = total ? `Cetak ${total} label` : 'Cetak';
     $('#lKosong').hidden = !total;
@@ -436,13 +440,42 @@ function tabLabel() {
   fmt.onchange = () => { S.format = fmt.value; garis.checked = !!formatDari(fmt.value).garis; simpan(); segarkan(); gambarAntri(); };
   jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
   $('#lContohNo').oninput = segarkan;
-  const rW = $('#lRollW'), rH = $('#lRollH'), roll = { ...UKURAN_ROLL, ...S.roll };
-  rW.value = roll.w; rH.value = roll.h;
-  rW.onchange = rH.onchange = () => {
-    const w = Math.max(25, Math.min(104, parseFloat(rW.value) || UKURAN_ROLL.w));   // GT820 prints up to 104 mm wide
-    const h = Math.max(15, Math.min(150, parseFloat(rH.value) || UKURAN_ROLL.h));
-    rW.value = w; rH.value = h; S.roll = { w, h }; simpan(); segarkan(); gambarAntri();
+  /* roll settings */
+  const isian = { w: $('#lRollW'), h: $('#lRollH'), kol: $('#lKol'), jarak: $('#lJarak'), gx: $('#lGx'), gy: $('#lGy') };
+  const BATAS = { w: [15, 104], h: [10, 150], kol: [1, 3], jarak: [0, 10], gx: [-10, 10], gy: [-10, 10] };
+  const roll = { ...UKURAN_ROLL, ...S.roll };
+  Object.entries(isian).forEach(([k, el]) => { el.value = roll[k]; });
+  const ubahRoll = () => {
+    const r = {};
+    Object.entries(isian).forEach(([k, el]) => {
+      const [lo, hi] = BATAS[k], v = parseFloat(el.value);
+      r[k] = Math.max(lo, Math.min(hi, isNaN(v) ? UKURAN_ROLL[k] : v));
+      el.value = r[k];
+    });
+    if (r.kol * r.w + (r.kol - 1) * r.jarak > 104) toast('Terlalu lebar: GT820 hanya bisa mencetak selebar 104 mm');
+    S.roll = r; simpan(); segarkan(); gambarAntri();
   };
+  Object.values(isian).forEach(el => { el.onchange = ubahRoll; });
+
+  /* Zebra connection status */
+  const tulisStatus = st => {
+    const el = $('#lZebra'); if (!el) return;
+    el.style.color = st.ok && st.siap !== false ? 'var(--tally)' : 'var(--stamp)';
+    el.innerHTML = st.ok && st.siap !== false ? '✓ Zebra GT820 tersambung dan siap'
+      : `✗ ${esc(st.pesan)} <button class="btn quiet sm" type="button" id="lZebraCek">Cek lagi</button>`;
+    const b = $('#lZebraCek'); if (b) b.onclick = () => cekZebra().then(tulisStatus);
+  };
+  cekZebra().then(tulisStatus);
+  /* checks the printer, then runs ambilKode() (which records the numbers) and sends them */
+  async function cetakKeZebra(ambilKode, judul) {
+    const st = await cekZebra(); tulisStatus(st);
+    if (!st.ok || st.siap === false) { alert('Printer belum siap: ' + st.pesan); return false; }
+    const codes = ambilKode(); if (!codes) return false;
+    const r = await kirimZebra(codes);
+    if (r.ok) toast(`${codes.length} label ${judul} dikirim ke Zebra`);
+    else alert(`Gagal mengirim ke printer: ${r.pesan}\n\nNomor sudah tercatat. Cetak ulang dari "Riwayat cetak".`);
+    return r.ok;
+  }
   addEventListener('resize', segarkan, { once: true });
 
   $('#lTambah').onclick = () => {
@@ -464,15 +497,18 @@ function tabLabel() {
   };
   $('#lKosong').onclick = () => { if (!confirm('Kosongkan daftar cetak?')) return; S.antri = []; simpan(); gambarAntri(); segarkan(); };
 
-  $('#lCetak').onclick = () => {
-    const total = S.antri.reduce((a, x) => a + x.n, 0);
-    const rincian = S.antri.map(x => { const b = barangById(x.bid), m = (S.nomor[x.bid] || 0) + 1; return `• ${b.tipe} ${detailBarang(b)}: ${x.n} label (#${pad(m)} – #${pad(m + x.n - 1)})`; }).join('\n');
-    if (!confirm(`Cetak ${total} label?\n\n${rincian}\n\nNomor ini langsung tercatat.`)) return;
-    const codes = [];
-    S.antri.forEach(x => codes.push(...cetakBaru(x.bid, x.n, oleh())));
-    cetakKeKertas(codes, fmt.value, parseInt(pos.value, 10) || 1, garis.checked);
-    toast(`${total} label dicetak`);
-    S.antri = []; simpan(); pos.value = 1;
+  $('#lCetak').onclick = async () => {
+    const tombol = $('#lCetak'); tombol.disabled = true;
+    await cetakKeZebra(() => {
+      const total = S.antri.reduce((a, x) => a + x.n, 0);
+      const rincian = S.antri.map(x => { const b = barangById(x.bid), m = (S.nomor[x.bid] || 0) + 1; return `• ${b.tipe} ${detailBarang(b)}: ${x.n} label (#${pad(m)} – #${pad(m + x.n - 1)})`; }).join('\n');
+      if (!confirm(`Cetak ${total} label ke Zebra?\n\n${rincian}\n\nNomor ini langsung tercatat.`)) return null;
+      const codes = [];
+      S.antri.forEach(x => codes.push(...cetakBaru(x.bid, x.n, oleh())));
+      S.antri = []; simpan();
+      return codes;
+    }, 'baru');
+    if (!fmt.isConnected) return;
     gambarAntri(); segarkan(); isiLog();
   };
 
@@ -493,11 +529,13 @@ function tabLabel() {
     ulang.push(u.k); gambarUlang();
     return { jenis: 'ok', pesan: `${nm} ditambahkan.` };
   }, { petunjuk: 'Ketik kode label lalu Enter.' });
-  $('#lUlang').onclick = () => {
-    cetakUlangCatat([...ulang], oleh());
-    cetakKeKertas([...ulang], fmt.value, 1, garis.checked);
-    toast(`${ulang.length} label dicetak ulang`);
-    ulang.length = 0; gambarUlang(); isiLog();
+  $('#lUlang').onclick = async () => {
+    const ok = await cetakKeZebra(() => {
+      if (!confirm(`Cetak ulang ${ulang.length} label ke Zebra dengan nomor yang sama?`)) return null;
+      cetakUlangCatat([...ulang], oleh()); return [...ulang];
+    }, 'ulang');
+    if (ok) ulang.length = 0;
+    if (fmt.isConnected) { gambarUlang(); isiLog(); }
   };
   gambarUlang();
 
@@ -512,15 +550,16 @@ function tabLabel() {
         <td>${esc(c.oleh)}</td><td><button class="btn quiet sm" data-ulang="${c.id}">Cetak ulang</button></td></tr>`;
     }).join('')}</tbody></table>`;
   }
-  $('#lLog').onclick = e => {
+  $('#lLog').onclick = async e => {
     const id = e.target.dataset.ulang; if (!id) return;
     const c = S.cetak.find(x => x.id === id);
     const bisa = c.codes.filter(k => S.unit[k].status !== 'KELUAR');
     if (!bisa.length) { toast('Semua unit di catatan ini sudah keluar'); return; }
-    if (!confirm(`Cetak ulang ${bisa.length} label dengan nomor yang sama?${bisa.length < c.codes.length ? `\n(${c.codes.length - bisa.length} unit sudah keluar, tidak ikut dicetak)` : ''}`)) return;
-    cetakUlangCatat(bisa, oleh());
-    cetakKeKertas(bisa, fmt.value, 1, garis.checked);
-    isiLog();
+    await cetakKeZebra(() => {
+      if (!confirm(`Cetak ulang ${bisa.length} label ke Zebra dengan nomor yang sama?${bisa.length < c.codes.length ? `\n(${c.codes.length - bisa.length} unit sudah keluar, tidak ikut dicetak)` : ''}`)) return null;
+      cetakUlangCatat(bisa, oleh()); return bisa;
+    }, 'ulang');
+    if (fmt.isConnected) isiLog();
   };
   isiLog(); segarkan(); gambarAntri();
 }
@@ -543,16 +582,20 @@ function svgQR(text) {
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) p += `M${c} ${r}h1v1h-1z`;
   return `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${p}" fill="#000"/></svg>`;
 }
+/* Barcode lines need room: below ~50×28 mm only the QR fits (same rule as the ZPL below). */
+const muatBarcode = (w, h) => w >= 50 && h >= 28;
+
 function elLabel(u, f, garis) {
   const b = barangById(u.bid);
   const w = f.a4 ? f.w : f.isi, h = f.h;
-  const s = h / 37, pd = Math.max(1.6, h * .06), bcH = h * .27, sela = h * .035;
+  const pakaiBc = !f.roll || muatBarcode(w, h);
+  const s = h / 37, pd = Math.max(1, h * .06), bcH = pakaiBc ? h * .27 : 0, sela = pakaiBc ? h * .035 : 0;
   const qr = Math.min(h - bcH - pd * 2 - sela, w * .42);
   const d = document.createElement('div');
   d.className = 'lbl' + (garis ? ' garis' : '');
   d.style.cssText = `width:${w}mm;height:${h}mm;padding:${pd}mm ${pd + .6}mm`;
   d.innerHTML = `
-    <div class="bc" style="height:${bcH}mm">${svgBarcode(u.k)}</div>
+    ${pakaiBc ? `<div class="bc" style="height:${bcH}mm">${svgBarcode(u.k)}</div>` : ''}
     <div class="bawah" style="margin-top:${sela}mm">
       <div class="qr" style="width:${qr}mm;height:${qr}mm">${svgQR(u.k)}</div>
       <div class="teks">
@@ -574,6 +617,70 @@ function tampilPratinjau(host, u, f, garis) {
   el.style.transform = `scale(${sk})`; el.style.transformOrigin = 'top left';
   bungkus.style.cssText = `width:${lw * sk}px;height:${lh * sk}px`;
 }
+/* ---------- Zebra GT820 via the local "HOLA Zebra" helper (raw ZPL over USB) ---------- */
+const ZEBRA = 'http://127.0.0.1:9101';
+async function cekZebra() {
+  try {
+    const r = await fetch(ZEBRA + '/status', { cache: 'no-store' });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, pesan: 'Program "HOLA Zebra" belum jalan di komputer ini (atau browser belum diizinkan mengakses perangkat lokal).' };
+  }
+}
+async function kirimZebra(codes) {
+  try {
+    const r = await fetch(ZEBRA + '/cetak', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: zplLabel(codes) });
+    return await r.json();
+  } catch (e) { return { ok: false, pesan: 'Tidak bisa menghubungi program HOLA Zebra' }; }
+}
+/* One ^XA…^XZ format per row of stickers. 203 dpi = 8 dots/mm; GT820 head = 832 dots (104 mm). */
+function zplLabel(codes) {
+  const f = formatDari('roll'), D = 8, mm = v => Math.round(v * D);
+  const { w, h, kol, jarak, gx, gy } = f;
+  const lebar = kol * w + (kol - 1) * jarak;
+  const kiri0 = Math.max(0, (104 - lebar) / 2) + gx;          // liner sits centred under the head
+  const bersih = s => String(s).replace(/[\^~]/g, ' ');
+  const pd = h >= 20 ? 1.5 : 1;
+  const pakaiBc = muatBarcode(w, h);
+  const bcH = pakaiBc ? h * .27 : 0;
+  const qrMm = Math.min(h - 2 * pd - (pakaiBc ? bcH + 1 : 0), w * .42);
+  const mag = Math.max(2, Math.min(10, Math.floor(mm(qrMm) / 25)));   // QR v2 = 25 modules
+  const qrDots = mag * 25;
+  const baris = [];
+  for (let i = 0; i < codes.length; i += kol) {
+    let z = `^XA^CI28^PW832^LL${mm(h)}^LH0,0^PR3`;
+    codes.slice(i, i + kol).forEach((k, c) => {
+      const u = S.unit[k], b = barangById(u.bid);
+      const x = mm(kiri0 + c * (w + jarak) + pd), y = mm(gy + pd);
+      let yAtas = y;
+      if (pakaiBc) {
+        z += `^FO${x},${y}^BY2,3,${mm(bcH)}^BCN,${mm(bcH)},N,N,N,A^FD${bersih(k)}^FS`;
+        yAtas = y + mm(bcH + 1);
+      }
+      z += `^FO${x},${yAtas}^BQN,2,${mag}^FDMA,${bersih(k)}^FS`;
+      const tx = x + qrDots + mm(1), tw = mm(kiri0 + c * (w + jarak) + w - pd) - tx;
+      const tinggiTeks = mm(h - pd) - yAtas;
+      const fh = Math.max(14, Math.min(40, Math.floor(tinggiTeks / 4.6))), fk = Math.max(12, Math.round(fh * .8));
+      // Font 0 averages ~0.62 × char width per character: squeeze width to fit; only names get cut, never the code.
+      const baris1 = (s, t, bolehPotong) => {
+        s = bersih(s);
+        let fw = Math.min(Math.round(t * .85), Math.floor(tw / (Math.max(1, s.length) * .62)));
+        if (fw < 10) { fw = 10; if (bolehPotong) s = s.slice(0, Math.max(4, Math.floor(tw / (fw * .62)))); }
+        return `^A0N,${t},${fw}^FD${s}^FS`;
+      };
+      const garisTeks = [[b.merek, fh, true], [b.tipe, fh, true], [detailBarang(b), fh, true], [k, fk, false]];
+      let ty = yAtas + 2;
+      garisTeks.forEach(([s, t, potong], j) => {
+        if (j === 3) ty += Math.round(fh * .25);
+        z += `^FO${tx},${ty}` + baris1(s, t, potong);
+        ty += t + 2;
+      });
+    });
+    baris.push(z + '^PQ1^XZ');
+  }
+  return baris.join('\n');
+}
+
 function cetakKeKertas(codes, fKey, posisi, garis) {
   const f = formatDari(fKey), box = $('#cetak'), gaya = $('#gayaHalaman');
   box.innerHTML = '';
