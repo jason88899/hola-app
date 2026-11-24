@@ -326,20 +326,14 @@ function tabLabel() {
      Label yang dicetak <b>belum dihitung sebagai stok</b> sampai admin gudang men-scan masuk.</p></section>` : ''}
   <div class="grid2">
     <section class="card">
-      <div class="card-hd"><h2>Cetak label baru</h2></div>
+      <div class="card-hd"><h2>1. Pilih barang</h2></div>
       <div id="lPilih"></div>
       <p class="hint" id="lInfo">Pilih barang sampai warna.</p>
       <div class="row">
         <label class="f">Jumlah label<input id="lJumlah" type="number" min="1" max="500" value="10" inputmode="numeric"></label>
-        <label class="f">Kertas<select id="lFormat">${Object.entries(FORMAT).map(([k, f]) => `<option value="${k}" ${k === (S.format || 'a4-3x8') ? 'selected' : ''}>${esc(f.nama)}</option>`).join('')}</select></label>
+        <label class="f">&nbsp;<button class="btn" id="lTambah" type="button" disabled>+ Tambah ke daftar</button></label>
       </div>
-      <div class="row">
-        <label class="f" id="lPosWrap">Mulai di kotak ke- (stiker sisa)<input id="lPos" type="number" min="1" value="1" inputmode="numeric"></label>
-        <label class="cek"><input type="checkbox" id="lGaris"> Garis potong</label>
-      </div>
-      <button class="btn besar" id="lCetak" disabled>Cetak</button>
-      <p class="hint">Di jendela print pilih <b>Margins: None</b> dan <b>Scale: 100%</b>.
-      Nomor langsung tercatat saat menekan Cetak. Kalau print dibatalkan, label bisa dicetak ulang dengan nomor yang sama.</p>
+      <p class="hint">Ulangi untuk barang lain. Semua barang di daftar dicetak sekaligus di lembar yang sama.</p>
     </section>
     <section class="card">
       <div class="card-hd"><h2>Contoh label</h2><span class="sub" id="lUkuran"></span></div>
@@ -347,6 +341,19 @@ function tabLabel() {
       <p class="hint">Barcode garis untuk scanner kasir, QR untuk kamera HP. Isinya sama.</p>
     </section>
   </div>
+  <section class="card">
+    <div class="card-hd"><h2>2. Daftar cetak</h2><span class="sub" id="lTotal"></span>
+      <div class="kanan"><button class="btn quiet sm" id="lKosong" type="button">Kosongkan</button></div></div>
+    <div class="tbl-wrap" id="lAntri"></div>
+    <div class="row c3" style="margin-top:12px">
+      <label class="f">Kertas<select id="lFormat">${Object.entries(FORMAT).map(([k, f]) => `<option value="${k}" ${k === (S.format || 'a4-3x8') ? 'selected' : ''}>${esc(f.nama)}</option>`).join('')}</select></label>
+      <label class="f" id="lPosWrap">Mulai di kotak ke- (stiker sisa)<input id="lPos" type="number" min="1" value="1" inputmode="numeric"></label>
+      <label class="cek"><input type="checkbox" id="lGaris"> Garis potong</label>
+    </div>
+    <button class="btn besar" id="lCetak" disabled>Cetak</button>
+    <p class="hint">Di jendela print pilih <b>Margins: None</b> dan <b>Scale: 100%</b>.
+    Nomor langsung tercatat saat menekan Cetak. Kalau print dibatalkan, label bisa dicetak ulang dengan nomor yang sama.</p>
+  </section>
   <section class="card">
     <div class="card-hd"><h2>Cetak ulang label rusak</h2></div>
     <p class="hint">Ketik kode yang ada di label (mis. <span class="mono">CODP180CK-0004</span>), atau scan kalau masih terbaca. Nomornya tetap sama.</p>
@@ -365,37 +372,82 @@ function tabLabel() {
   const pilih = pemilihBarang($('#lPilih'), { awal: S.labelBarang, onChange: v => { bid = v; S.labelBarang = v; segarkan(); } });
   bid = pilih.get();
 
+  S.antri = (S.antri || []).filter(x => barangById(x.bid));   // print list: [{bid, n}]
+  const diAntri = id => (S.antri.find(x => x.bid === id) || { n: 0 }).n;
+  const jumlah = () => Math.max(1, Math.min(500, parseInt(jml.value, 10) || 0));
+
   function segarkan() {
     if (!fmt.isConnected) return;   // tab already closed
     const f = FORMAT[fmt.value];
-    $('#lPosWrap').hidden = !f.a4;
     $('#lUkuran').textContent = `${f.a4 ? f.w : f.isi} × ${f.h} mm`;
-    const n = Math.max(1, Math.min(500, parseInt(jml.value, 10) || 0));
-    $('#lCetak').disabled = !bid;
+    const n = jumlah();
+    $('#lTambah').disabled = !bid;
     if (!bid) { $('#lInfo').textContent = 'Pilih barang sampai warna.'; $('#lPrev').innerHTML = '<div class="kosong">Pilih barang untuk melihat contoh.</div>'; return; }
-    const b = barangById(bid), akhir = S.nomor[bid] || 0;
+    const b = barangById(bid), akhir = S.nomor[bid] || 0, antri = diAntri(bid);
     const { dicetak } = stokLabel();
     $('#lInfo').innerHTML = `Kode barang <b class="mono">${esc(b.kode)}</b> ${b.kunci ? '🔒' : '<span class="sub">(dikunci setelah cetak pertama)</span>'}
       · Terakhir dicetak: <b>${akhir ? '#' + pad(akhir) : 'belum pernah'}</b>
-      · Akan dicetak: <b>#${pad(akhir + 1)} – #${pad(akhir + n)}</b>
+      ${antri ? `· Sudah di daftar: <b>${antri} label</b>` : ''}
+      · Berikutnya: <b>#${pad(akhir + antri + 1)} – #${pad(akhir + antri + n)}</b>
       ${master && dicetak[bid] ? `<br>Dicetak tapi belum di-scan masuk: <b>${dicetak[bid]} unit</b>` : ''}`;
-    $('#lCetak').textContent = `Cetak ${n} label`;
-    const contohUnit = { k: kodeUnit(b, akhir + 1), bid, no: akhir + 1 };
-    tampilPratinjau($('#lPrev'), contohUnit, f, garis.checked);
+    $('#lTambah').textContent = `+ Tambah ${n} ke daftar`;
+    const no = akhir + antri + 1;
+    tampilPratinjau($('#lPrev'), { k: kodeUnit(b, no), bid, no }, f, garis.checked);
   }
-  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!FORMAT[fmt.value].garis; simpan(); segarkan(); };
-  jml.oninput = segarkan; garis.onchange = segarkan;
+
+  function gambarAntri() {
+    if (!fmt.isConnected) return;
+    const f = FORMAT[fmt.value];
+    $('#lPosWrap').hidden = !f.a4;
+    const total = S.antri.reduce((a, x) => a + x.n, 0);
+    $('#lAntri').innerHTML = S.antri.length ? `<table><thead><tr><th>Barang</th><th class="n">Jumlah</th><th>Nomor</th><th></th></tr></thead><tbody>${S.antri.map((x, i) => {
+      const b = barangById(x.bid), mulai = (S.nomor[x.bid] || 0) + 1;
+      return `<tr><td>${esc(namaBarang(b))}<span class="sub">${esc(detailBarang(b))}</span></td>
+        <td class="n"><input type="number" min="1" max="500" value="${x.n}" data-ubahantri="${i}" style="width:72px;text-align:right" inputmode="numeric"></td>
+        <td class="mono">#${pad(mulai)} – #${pad(mulai + x.n - 1)}</td>
+        <td class="n"><button class="btn quiet sm" data-hapusantri="${i}" type="button" aria-label="hapus">×</button></td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="kosong">Belum ada. Pilih barang di atas, isi jumlah, lalu tekan "+ Tambah ke daftar".</div>';
+    const per = f.a4 ? f.kol * f.bar : 1, awal = f.a4 ? Math.min(per, Math.max(1, parseInt(pos.value, 10) || 1)) : 1;
+    const lembar = total ? Math.ceil((awal - 1 + total) / per) : 0;
+    $('#lTotal').textContent = total ? `${S.antri.length} barang · ${total} label · ${f.a4 ? lembar + ' lembar A4' : total + ' potong kertas kasir'}` : '';
+    $('#lCetak').disabled = !total;
+    $('#lCetak').textContent = total ? `Cetak ${total} label` : 'Cetak';
+    $('#lKosong').hidden = !total;
+  }
+
+  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!FORMAT[fmt.value].garis; simpan(); segarkan(); gambarAntri(); };
+  jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
   addEventListener('resize', segarkan, { once: true });
 
+  $('#lTambah').onclick = () => {
+    if (!bid) return;
+    const n = jumlah(), b = barangById(bid);
+    const ada = S.antri.find(x => x.bid === bid);
+    if (ada) ada.n = Math.min(500, ada.n + n); else S.antri.push({ bid, n });
+    simpan(); gambarAntri(); segarkan();
+    toast(`+${n} ${b.tipe} ${detailBarang(b)}`);
+  };
+  $('#lAntri').onclick = e => {
+    const i = e.target.dataset.hapusantri; if (i === undefined) return;
+    S.antri.splice(+i, 1); simpan(); gambarAntri(); segarkan();
+  };
+  $('#lAntri').onchange = e => {
+    const i = e.target.dataset.ubahantri; if (i === undefined) return;
+    S.antri[+i].n = Math.max(1, Math.min(500, parseInt(e.target.value, 10) || 1));
+    simpan(); gambarAntri(); segarkan();
+  };
+  $('#lKosong').onclick = () => { if (!confirm('Kosongkan daftar cetak?')) return; S.antri = []; simpan(); gambarAntri(); segarkan(); };
+
   $('#lCetak').onclick = () => {
-    const n = Math.max(1, Math.min(500, parseInt(jml.value, 10) || 0));
-    const b = barangById(bid), akhir = S.nomor[bid] || 0;
-    if (!confirm(`Cetak ${n} label ${namaBarang(b)} ${detailBarang(b)}\nnomor #${pad(akhir + 1)} – #${pad(akhir + n)}?\n\nNomor ini langsung tercatat.`)) return;
-    const codes = cetakBaru(bid, n, oleh());
+    const total = S.antri.reduce((a, x) => a + x.n, 0);
+    const rincian = S.antri.map(x => { const b = barangById(x.bid), m = (S.nomor[x.bid] || 0) + 1; return `• ${b.tipe} ${detailBarang(b)}: ${x.n} label (#${pad(m)} – #${pad(m + x.n - 1)})`; }).join('\n');
+    if (!confirm(`Cetak ${total} label?\n\n${rincian}\n\nNomor ini langsung tercatat.`)) return;
+    const codes = [];
+    S.antri.forEach(x => codes.push(...cetakBaru(x.bid, x.n, oleh())));
     cetakKeKertas(codes, fmt.value, parseInt(pos.value, 10) || 1, garis.checked);
-    toast(`${n} label dicetak: #${pad(akhir + 1)} – #${pad(akhir + n)}`);
-    pos.value = 1;
-    segarkan(); isiLog();
+    toast(`${total} label dicetak`);
+    S.antri = []; simpan(); pos.value = 1;
+    gambarAntri(); segarkan(); isiLog();
   };
 
   /* reprint */
@@ -444,7 +496,7 @@ function tabLabel() {
     cetakKeKertas(bisa, fmt.value, 1, garis.checked);
     isiLog();
   };
-  isiLog(); segarkan();
+  isiLog(); segarkan(); gambarAntri();
 }
 
 /* ---------- label drawing ---------- */
