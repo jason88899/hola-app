@@ -333,12 +333,15 @@ function tabLabel() {
         <label class="f">Jumlah label<input id="lJumlah" type="number" min="1" max="500" value="10" inputmode="numeric"></label>
         <label class="f">&nbsp;<button class="btn" id="lTambah" type="button" disabled>+ Tambah ke daftar</button></label>
       </div>
-      <p class="hint">Ulangi untuk barang lain. Semua barang di daftar dicetak sekaligus di lembar yang sama.</p>
+      <p class="hint">Ulangi untuk barang lain. Semua barang di daftar dicetak sekaligus di lembar yang sama.
+        Maksimal 500 label per barang sekali cetak (± 21 lembar A4); lebih dari itu dicetak bertahap.</p>
     </section>
     <section class="card">
       <div class="card-hd"><h2>Contoh label</h2><span class="sub" id="lUkuran"></span></div>
       <div class="pratinjau" id="lPrev"><div class="kosong">Pilih barang untuk melihat contoh.</div></div>
       <p class="hint">Barcode garis untuk scanner kasir, QR untuk kamera HP. Isinya sama.</p>
+      <label class="f" style="max-width:260px">Lihat contoh nomor lain (tidak dicetak)
+        <input id="lContohNo" type="number" min="1" max="9999999" placeholder="mis. 10000" inputmode="numeric"></label>
     </section>
   </div>
   <section class="card">
@@ -391,7 +394,8 @@ function tabLabel() {
       · Berikutnya: <b>#${pad(akhir + antri + 1)} – #${pad(akhir + antri + n)}</b>
       ${master && dicetak[bid] ? `<br>Dicetak tapi belum di-scan masuk: <b>${dicetak[bid]} unit</b>` : ''}`;
     $('#lTambah').textContent = `+ Tambah ${n} ke daftar`;
-    const no = akhir + antri + 1;
+    const lihat = parseInt($('#lContohNo').value, 10);
+    const no = lihat > 0 ? lihat : akhir + antri + 1;
     tampilPratinjau($('#lPrev'), { k: kodeUnit(b, no), bid, no }, f, garis.checked);
   }
 
@@ -417,6 +421,7 @@ function tabLabel() {
 
   fmt.onchange = () => { S.format = fmt.value; garis.checked = !!FORMAT[fmt.value].garis; simpan(); segarkan(); gambarAntri(); };
   jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
+  $('#lContohNo').oninput = segarkan;
   addEventListener('resize', segarkan, { once: true });
 
   $('#lTambah').onclick = () => {
@@ -964,15 +969,20 @@ function tabBarang() {
   const gambar = () => {
     const q = $('#bCari').value.trim().toUpperCase().split(/\s+/).filter(Boolean);
     const baris = S.barang.filter(b => q.every(w => `${b.tipe} ${b.ukuran} ${b.warna} ${b.kode}`.toUpperCase().includes(w)));
-    $('#bTabel').innerHTML = `<table><thead><tr><th>Kode barang</th><th>Barang</th><th class="n">No. terakhir</th>${LOKASI.map(l => `<th class="n">Tanpa label ${l.id}</th>`).join('')}</tr></thead><tbody>
+    $('#bTabel').innerHTML = `<table><thead><tr><th>Kode barang</th><th>Barang</th><th class="n">No. terakhir<span class="sub">demo: bisa dinaikkan</span></th>${LOKASI.map(l => `<th class="n">Tanpa label ${l.id}</th>`).join('')}</tr></thead><tbody>
       ${baris.map(b => `<tr><td style="min-width:130px">${b.kunci ? `<span class="mono">${esc(b.kode)}</span> 🔒` : `<input class="mono" data-kode="${b.id}" value="${esc(b.kode)}" maxlength="12">`}</td>
-        <td>${esc(namaBarang(b))}<span class="sub">${esc(detailBarang(b))}</span></td><td class="n">${S.nomor[b.id] ? '#' + pad(S.nomor[b.id]) : '-'}</td>
+        <td>${esc(namaBarang(b))}<span class="sub">${esc(detailBarang(b))}</span></td><td class="n"><input type="number" min="0" style="width:96px" data-nomor="${b.id}" value="${S.nomor[b.id] || 0}" title="Khusus demo: lompat nomor"></td>
         ${LOKASI.map(l => `<td class="n"><input type="number" min="0" style="width:70px" data-lama="${b.id}|${l.id}" value="${lamaDi(b.id, l.id)}"></td>`).join('')}</tr>`).join('')}
     </tbody></table>`;
   };
   $('#bCari').oninput = gambar;
   $('#bTabel').onchange = e => {
     const el = e.target;
+    if (el.dataset.nomor) {   // demo only: jump the counter forward to try big numbers
+      const id = el.dataset.nomor, lama = S.nomor[id] || 0, v = parseInt(el.value, 10);
+      if (!(v >= lama)) { toast(`Tidak bisa mundur: sudah dicetak sampai #${pad(lama)}`); el.value = lama; return; }
+      S.nomor[id] = v; simpan(); toast(`Label berikutnya mulai #${pad(v + 1)}`); return;
+    }
     if (el.dataset.lama) { S.lama[el.dataset.lama] = Math.max(0, parseInt(el.value, 10) || 0); simpan(); toast('Stok tanpa label disimpan'); return; }
     if (el.dataset.kode) {
       const b = barangById(el.dataset.kode), v = bersihkan(el.value).replace(/[^A-Z0-9]/g, '');
