@@ -21,9 +21,19 @@ const FORMAT = {
   'a4-3x8': { nama: 'A4 stiker 3×8 · 24 label (70×37 mm)', a4: true, kol: 3, bar: 8, w: 70, h: 37, atas: 0.5, kiri: 0, jk: 0, jb: 0 },
   'a4-2x7': { nama: 'A4 stiker 2×7 · 14 label (99×38 mm)', a4: true, kol: 2, bar: 7, w: 99.1, h: 38.1, atas: 15.1, kiri: 4.6, jk: 2.5, jb: 0 },
   'a4-2x5': { nama: 'A4 kertas biasa 2×5 · 10 label besar (gunting)', a4: true, kol: 2, bar: 5, w: 105, h: 59.3, atas: 0, kiri: 0, jk: 0, jb: 0, garis: true },
+  'roll': { nama: 'Printer label roll (Zebra GT820 dll.) · 1 label per stiker', nota: true, roll: true },
   'nota-80': { nama: 'Printer kasir 80 mm', nota: true, w: 80, h: 45, isi: 72 },
   'nota-58': { nama: 'Printer kasir 58 mm', nota: true, w: 58, h: 40, isi: 48 },
 };
+
+/* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
+const UKURAN_ROLL = { w: 60, h: 40 };
+function formatDari(key) {
+  const f = FORMAT[key] || FORMAT['a4-3x8'];
+  if (!f.roll) return f;
+  const r = { ...UKURAN_ROLL, ...(S && S.roll) };
+  return { ...f, w: r.w, h: r.h, isi: r.w };
+}
 
 /* ---------- demo item master (spring bed COLORADO, kategori MATRAS) ---------- */
 const SEED = [
@@ -351,6 +361,9 @@ function tabLabel() {
     <div class="row c3" style="margin-top:12px">
       <label class="f">Kertas<select id="lFormat">${Object.entries(FORMAT).map(([k, f]) => `<option value="${k}" ${k === (S.format || 'a4-3x8') ? 'selected' : ''}>${esc(f.nama)}</option>`).join('')}</select></label>
       <label class="f" id="lPosWrap">Mulai di kotak ke- (stiker sisa)<input id="lPos" type="number" min="1" value="1" inputmode="numeric"></label>
+      <label class="f" id="lRollWrap">Ukuran stiker di roll (lebar × tinggi, mm)
+        <span style="display:flex;gap:6px;align-items:center"><input id="lRollW" type="number" min="25" max="104" inputmode="numeric"> ×
+        <input id="lRollH" type="number" min="15" max="150" inputmode="numeric"></span></label>
       <label class="cek"><input type="checkbox" id="lGaris"> Garis potong</label>
     </div>
     <button class="btn besar" id="lCetak" disabled>Cetak</button>
@@ -370,7 +383,7 @@ function tabLabel() {
   </section>`;
 
   const garis = $('#lGaris'), fmt = $('#lFormat'), jml = $('#lJumlah'), pos = $('#lPos');
-  garis.checked = !!FORMAT[fmt.value].garis;
+  garis.checked = !!formatDari(fmt.value).garis;
   let bid = null;
   const pilih = pemilihBarang($('#lPilih'), { awal: S.labelBarang, onChange: v => { bid = v; S.labelBarang = v; segarkan(); } });
   bid = pilih.get();
@@ -381,7 +394,7 @@ function tabLabel() {
 
   function segarkan() {
     if (!fmt.isConnected) return;   // tab already closed
-    const f = FORMAT[fmt.value];
+    const f = formatDari(fmt.value);
     $('#lUkuran').textContent = `${f.a4 ? f.w : f.isi} × ${f.h} mm`;
     const n = jumlah();
     $('#lTambah').disabled = !bid;
@@ -401,8 +414,9 @@ function tabLabel() {
 
   function gambarAntri() {
     if (!fmt.isConnected) return;
-    const f = FORMAT[fmt.value];
+    const f = formatDari(fmt.value);
     $('#lPosWrap').hidden = !f.a4;
+    $('#lRollWrap').hidden = !f.roll;
     const total = S.antri.reduce((a, x) => a + x.n, 0);
     $('#lAntri').innerHTML = S.antri.length ? `<table><thead><tr><th>Barang</th><th class="n">Jumlah</th><th>Nomor</th><th></th></tr></thead><tbody>${S.antri.map((x, i) => {
       const b = barangById(x.bid), mulai = (S.nomor[x.bid] || 0) + 1;
@@ -413,15 +427,22 @@ function tabLabel() {
     }).join('')}</tbody></table>` : '<div class="kosong">Belum ada. Pilih barang di atas, isi jumlah, lalu tekan "+ Tambah ke daftar".</div>';
     const per = f.a4 ? f.kol * f.bar : 1, awal = f.a4 ? Math.min(per, Math.max(1, parseInt(pos.value, 10) || 1)) : 1;
     const lembar = total ? Math.ceil((awal - 1 + total) / per) : 0;
-    $('#lTotal').textContent = total ? `${S.antri.length} barang · ${total} label · ${f.a4 ? lembar + ' lembar A4' : total + ' potong kertas kasir'}` : '';
+    $('#lTotal').textContent = total ? `${S.antri.length} barang · ${total} label · ${f.a4 ? lembar + ' lembar A4' : total + (f.roll ? ' stiker' : ' potong kertas kasir')}` : '';
     $('#lCetak').disabled = !total;
     $('#lCetak').textContent = total ? `Cetak ${total} label` : 'Cetak';
     $('#lKosong').hidden = !total;
   }
 
-  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!FORMAT[fmt.value].garis; simpan(); segarkan(); gambarAntri(); };
+  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!formatDari(fmt.value).garis; simpan(); segarkan(); gambarAntri(); };
   jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
   $('#lContohNo').oninput = segarkan;
+  const rW = $('#lRollW'), rH = $('#lRollH'), roll = { ...UKURAN_ROLL, ...S.roll };
+  rW.value = roll.w; rH.value = roll.h;
+  rW.onchange = rH.onchange = () => {
+    const w = Math.max(25, Math.min(104, parseFloat(rW.value) || UKURAN_ROLL.w));   // GT820 prints up to 104 mm wide
+    const h = Math.max(15, Math.min(150, parseFloat(rH.value) || UKURAN_ROLL.h));
+    rW.value = w; rH.value = h; S.roll = { w, h }; simpan(); segarkan(); gambarAntri();
+  };
   addEventListener('resize', segarkan, { once: true });
 
   $('#lTambah').onclick = () => {
@@ -554,7 +575,7 @@ function tampilPratinjau(host, u, f, garis) {
   bungkus.style.cssText = `width:${lw * sk}px;height:${lh * sk}px`;
 }
 function cetakKeKertas(codes, fKey, posisi, garis) {
-  const f = FORMAT[fKey], box = $('#cetak'), gaya = $('#gayaHalaman');
+  const f = formatDari(fKey), box = $('#cetak'), gaya = $('#gayaHalaman');
   box.innerHTML = '';
   if (f.a4) {
     gaya.textContent = '@page{size:A4;margin:0}';
