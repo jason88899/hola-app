@@ -26,7 +26,8 @@ const FORMAT = {
 
 /* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
 // Default = roll currently in the GT820: 33×15 mm stickers, 3 per row, ~2 mm apart.
-const UKURAN_ROLL = { w: 33, h: 15, kol: 3, jarak: 2, gx: 0, gy: 0 };
+// Gap measured from the first real print (2026-11-24): columns drifted ~0.65 mm each at 2 mm → ~2.6 mm.
+const UKURAN_ROLL = { w: 33, h: 15, kol: 3, jarak: 2.6, gx: 0, gy: 0 };
 function formatDari(key) {
   const f = FORMAT[key] || FORMAT.roll;
   if (!f.roll) return f;
@@ -377,10 +378,10 @@ function tabLabel() {
         <span style="display:flex;gap:6px;align-items:center"><input id="lRollW" type="number" min="15" max="104" step="0.5" inputmode="decimal"> ×
         <input id="lRollH" type="number" min="10" max="150" step="0.5" inputmode="decimal"></span></label>
       <label class="f">Stiker per baris<select id="lKol"><option>1</option><option>2</option><option>3</option></select></label>
-      <label class="f">Jarak antar stiker (mm)<input id="lJarak" type="number" min="0" max="10" step="0.5" inputmode="decimal"></label>
+      <label class="f">Jarak antar stiker (mm)<input id="lJarak" type="number" min="0" max="10" step="0.1" inputmode="decimal"></label>
       <label class="f">Geser kanan × bawah (mm)
-        <span style="display:flex;gap:6px;align-items:center"><input id="lGx" type="number" min="-10" max="10" step="0.5" inputmode="decimal"> ×
-        <input id="lGy" type="number" min="-10" max="10" step="0.5" inputmode="decimal"></span></label>
+        <span style="display:flex;gap:6px;align-items:center"><input id="lGx" type="number" min="-10" max="10" step="0.1" inputmode="decimal"> ×
+        <input id="lGy" type="number" min="-10" max="10" step="0.1" inputmode="decimal"></span></label>
       <label class="f" id="lPosWrap" hidden><input id="lPos" type="number" value="1"></label>
       <label class="cek" hidden><input type="checkbox" id="lGaris"> Garis potong</label>
     </div>
@@ -655,18 +656,19 @@ function zplLabel(codes) {
   const lebar = kol * w + (kol - 1) * jarak;
   const kiri0 = Math.max(0, (104 - lebar) / 2) + gx;          // liner sits centred under the head
   const bersih = s => String(s).replace(/[\^~]/g, ' ');
-  const pd = h >= 20 ? 1.5 : 1;
+  const pd = h >= 20 ? 1.5 : 1, pdV = h >= 20 ? 1.5 : .75;   // small stickers: tighter top/bottom so the QR can grow
   const pakaiBc = muatBarcode(w, h);
   const bcH = pakaiBc ? h * .27 : 0;
-  const qrMm = Math.min(h - 2 * pd - (pakaiBc ? bcH + 1 : 0), w * .42);
-  const mag = Math.max(2, Math.min(10, Math.floor(mm(qrMm) / 25)));   // QR v2 = 25 modules
-  const qrDots = mag * 25;
+  const qrMm = Math.min(h - 2 * pdV - (pakaiBc ? bcH + 1 : 0), w * .42);
   const baris = [];
   for (let i = 0; i < codes.length; i += kol) {
     let z = `^XA^CI28^PW832^LL${mm(h)}^LH0,0^PR3`;
     codes.slice(i, i + kol).forEach((k, c) => {
       const u = S.unit[k], b = barangById(u.bid);
-      const x = mm(kiri0 + c * (w + jarak) + pd), y = mm(gy + pd);
+      const x = mm(kiri0 + c * (w + jarak) + pd), y = mm(gy + pdV);
+      // QR version 1 (21 modules) holds up to 20 characters at error level M; longer codes need version 2 (25)
+      const modul = k.length <= 20 ? 21 : 25;
+      const mag = Math.max(2, Math.min(10, Math.floor(mm(qrMm) / modul))), qrDots = mag * modul;
       let yAtas = y;
       if (pakaiBc) {
         z += `^FO${x},${y}^BY2,3,${mm(bcH)}^BCN,${mm(bcH)},N,N,N,A^FD${bersih(k)}^FS`;
@@ -1250,6 +1252,8 @@ function render() {
 if (APK) $('#lnkApk').hidden = true;   // already in the app
 
 S = muat();
+// PCs that saved the first-guess 2 mm gap for the 33×15 roll get the measured 2.6 mm once.
+if (S && S.roll && S.roll.w === 33 && S.roll.h === 15 && S.roll.jarak === 2 && !S.jarakDiukur) { S.roll.jarak = 2.6; S.jarakDiukur = true; simpan(); }
 if (HP) {
   // Phones start with no labelled stock: only what is actually scanned there. One-time reset for
   // phones that still hold the sample data from earlier versions.
