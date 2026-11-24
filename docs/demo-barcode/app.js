@@ -73,7 +73,7 @@ function buatLama(barang) {
 }
 function kosong() {
   const barang = buatBarang();
-  return { versi: 1, barang, lama: buatLama(barang), nomor: {}, unit: {}, cetak: [], mutasi: [], audit: [], peran: HP ? 'gudang' : 'master', tab: HP ? 'masuk' : 'label', seq: 1 };
+  return { versi: 1, barang, lama: buatLama(barang), nomor: {}, unit: {}, cetak: [], mutasi: [], audit: [], peran: HP ? 'gudang' : 'master', tab: HP ? 'masuk' : 'label', seq: 1, hpKosong: true };
 }
 function contoh() {
   S = kosong();
@@ -1225,7 +1225,7 @@ $('#btnData').onclick = () => {
       const d = JSON.parse(await f.text());
       if (!d || !Array.isArray(d.barang) || typeof d.unit !== 'object') throw new Error('bukan file data demo');
       if (!confirm('Ganti data demo di perangkat ini dengan isi file?')) return;
-      S = d; simpan(); $('#dlg').close(); render(); toast('Data diimpor');
+      S = d; S.hpKosong = true; simpan(); $('#dlg').close(); render(); toast('Data diimpor');
     } catch (err) { toast('Gagal impor: ' + err.message); }
   };
 };
@@ -1250,5 +1250,9 @@ function render() {
 if (APK) $('#lnkApk').hidden = true;   // already in the app
 
 S = muat();
-if (!S || !Array.isArray(S.barang)) contoh();
+if (HP) {
+  // Phones start with no labelled stock: only what is actually scanned there. One-time reset for
+  // phones that still hold the sample data from earlier versions.
+  if (!S || !Array.isArray(S.barang) || !S.hpKosong) { S = kosong(); S.hpKosong = true; simpan(); }
+} else if (!S || !Array.isArray(S.barang)) contoh();
 render();
