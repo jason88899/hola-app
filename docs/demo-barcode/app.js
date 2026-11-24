@@ -532,8 +532,7 @@ function elLabel(u, f, garis) {
       <div class="teks">
         <span class="nama" style="font-size:${(7.2 * s).toFixed(1)}pt">${esc(b.merek)}<br>${esc(b.tipe)}</span>
         <span style="font-size:${(8 * s).toFixed(1)}pt;font-weight:700">${esc(detailBarang(b))}</span>
-        <span class="no" style="font-size:${(15 * s).toFixed(1)}pt">#${pad(u.no)}</span>
-        <span class="kode" style="font-size:${(6 * s).toFixed(1)}pt">${esc(u.k)}</span>
+        <span class="kode" style="font-size:${(7.5 * s).toFixed(1)}pt;margin-top:${(1.2 * s).toFixed(1)}mm">${esc(u.k)}</span>
       </div>
     </div>`;
   return d;
