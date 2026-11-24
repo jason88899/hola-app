@@ -4,6 +4,9 @@
 'use strict';
 
 const KUNCI = 'holaDemoBarcode.v1';
+// Running inside the Android demo app (Capacitor) → phone defaults: scan roles, share files instead of download.
+const APK = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const HP = APK || matchMedia('(pointer:coarse)').matches;
 const LOKASI = [
   { id: 'HO', nama: 'Kantor Pusat' },
   { id: 'GDG-01', nama: 'Gudang Cabang' },
@@ -70,7 +73,7 @@ function buatLama(barang) {
 }
 function kosong() {
   const barang = buatBarang();
-  return { versi: 1, barang, lama: buatLama(barang), nomor: {}, unit: {}, cetak: [], mutasi: [], audit: [], peran: 'master', tab: 'label', seq: 1 };
+  return { versi: 1, barang, lama: buatLama(barang), nomor: {}, unit: {}, cetak: [], mutasi: [], audit: [], peran: HP ? 'gudang' : 'master', tab: HP ? 'masuk' : 'label', seq: 1 };
 }
 function contoh() {
   S = kosong();
@@ -84,7 +87,7 @@ function contoh() {
   catatMutasi({ jenis: 'MASUK', lok: 'HO', units: c2, ket: 'Dari produksi · SJ-0002', oleh: 'Admin Gudang', t: t0 + 0.25 * H });
   catatMutasi({ jenis: 'KELUAR', lok: 'HO', units: [c1[2], c1[6]], lama: [{ bid: ck.id, qty: 1 }], ket: 'Toko Contoh · F-0001', oleh: 'Admin Gudang', t: t0 + 3 * H });
   catatMutasi({ jenis: 'PINDAH', lok: 'HO', ke: 'GDG-01', units: [c1[9]], ket: 'Stok cabang', oleh: 'Admin Gudang', t: t0 + 4 * H });
-  S.peran = 'master'; S.tab = 'label';
+  S.peran = HP ? 'gudang' : 'master'; S.tab = HP ? 'masuk' : 'label';
   simpan();
 }
 
@@ -117,9 +120,20 @@ function toast(pesan) {
 }
 function cariUnit(k) {
   if (S.unit[k]) return S.unit[k];
-  const m = /^(.+?)-?(\d{1,6})$/.exec(k);          // accept without dash or short number
-  if (m) { const k2 = m[1] + '-' + pad(+m[2]); if (S.unit[k2]) return S.unit[k2]; }
-  return null;
+  const m = /^(.+?)-?(\d{1,7})$/.exec(k);          // accept without dash or short number
+  if (!m) return null;
+  const k2 = m[1] + '-' + pad(+m[2]);
+  if (S.unit[k2]) return S.unit[k2];
+  // Label printed on another device (e.g. the PC with the Zebra): the code itself says which
+  // item and which number it is, so register it here as "printed" instead of rejecting it.
+  const b = S.barang.find(x => x.kode === m[1]);
+  if (!b || +m[2] < 1) return null;
+  const no = +m[2];
+  S.unit[k2] = { k: k2, bid: b.id, no, status: 'DICETAK', lok: null, r: [{ t: Date.now(), a: 'DICETAK', oleh: 'perangkat lain' }] };
+  S.nomor[b.id] = Math.max(S.nomor[b.id] || 0, no);
+  b.kunci = true;
+  simpan();
+  return S.unit[k2];
 }
 function riwayatTerakhir(u, aksi) { for (let i = u.r.length - 1; i >= 0; i--) if (aksi.includes(u.r[i].a)) return u.r[i]; return null; }
 function posisiUnit(u) {
@@ -1078,7 +1092,17 @@ function eksporExcel(filter) {
     const audit = S.audit.map(a => { const b = barangById(a.bid); return { Tanggal: new Date(a.t), ...isiBarang(b), Gudang: namaLok(a.lok), Seharusnya: a.harus.length, Ditemukan: a.ketemu.length, 'Tidak ditemukan': a.hilang.map(k => '#' + pad(S.unit[k].no)).join(', '), 'Tanpa label (sistem)': a.lamaSistem, 'Tanpa label (dihitung)': a.lamaHitung ?? '', Oleh: a.oleh }; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(audit, { dateNF: 'dd/mm/yyyy hh:mm' }), 'Hitung');
   }
-  XLSX.writeFile(wb, `demo-barcode-riwayat${filter ? '-' + filter.toLowerCase() : ''}.xlsx`);
+  const nama = `demo-barcode-riwayat${filter ? '-' + filter.toLowerCase() : ''}.xlsx`;
+  if (APK) bagikanBerkas(nama, XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }));
+  else XLSX.writeFile(wb, nama);
+}
+/* In the Android app there is no download folder: save to cache and open the share sheet (WhatsApp, Drive…). */
+async function bagikanBerkas(nama, base64) {
+  try {
+    const { Filesystem, Share } = window.Capacitor.Plugins;
+    const r = await Filesystem.writeFile({ path: nama, data: base64, directory: 'CACHE' });
+    await Share.share({ title: nama, url: r.uri });
+  } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast('Gagal membagikan: ' + (e && e.message || e)); }
 }
 
 /* =================================================================
@@ -1145,6 +1169,7 @@ $('#btnData').onclick = () => {
   $('#dContoh').onclick = () => { if (!confirm('Hapus data demo sekarang dan isi ulang dengan contoh?')) return; contoh(); $('#dlg').close(); render(); toast('Data contoh dimuat'); };
   $('#dKosong').onclick = () => { if (!confirm('Hapus semua data demo dan mulai kosong?')) return; S = kosong(); simpan(); $('#dlg').close(); render(); toast('Data demo dikosongkan'); };
   $('#dEkspor').onclick = () => {
+    if (APK) { bagikanBerkas(`hola-demo-barcode-${new Date().toISOString().slice(0, 10)}.json`, btoa(unescape(encodeURIComponent(JSON.stringify(S))))); return; }
     const blob = new Blob([JSON.stringify(S)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `hola-demo-barcode-${new Date().toISOString().slice(0, 10)}.json`; a.click();
@@ -1177,6 +1202,8 @@ function render() {
      hitung: tabHitung, stok: tabStok, cari: tabCari, riwayat: tabRiwayat, barang: tabBarang })[S.tab]();
   simpan();
 }
+
+if (APK) $('#lnkApk').hidden = true;   // already in the app
 
 S = muat();
 if (!S || !Array.isArray(S.barang)) contoh();
