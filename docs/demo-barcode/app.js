@@ -319,16 +319,17 @@ function pemilihBarang(host, { onChange, awal } = {}) {
     pilihan[k] = e.target.value; isi(); if (onChange) onChange(bid());
   });
   isi();
-  return { get: bid };
+  // kandidat(): all items matching what is chosen so far (nothing chosen = every item)
+  return { get: bid, kandidat, label: () => kol.map(([k]) => pilihan[k]).filter(Boolean).join(' ') };
 }
 
 /* ---------- unit list rendering ---------- */
-function daftarUnit(codes, { hapus = false, kelas = () => '', kosongTeks = 'Belum ada yang di-scan.' } = {}) {
+function daftarUnit(codes, { hapus = false, kelas = () => '', kosongTeks = 'Belum ada yang di-scan.', target = null } = {}) {
   if (!codes.length) return `<div class="kosong">${kosongTeks}</div>`;
   return kelompok(codes).map(([bid, list]) => {
     const b = barangById(bid);
     return `<div class="grup">
-      <div class="grup-hd"><b>${esc(namaBarang(b))}</b><span class="sub">${esc(detailBarang(b))}</span><span class="n">${list.length} unit</span></div>
+      <div class="grup-hd"><b>${esc(namaBarang(b))}</b><span class="sub">${esc(detailBarang(b))}</span><span class="n">${list.length}${target ? ' / ' + target(bid) : ''} unit</span></div>
       <div class="chips">${list.map(k => `<span class="chip ${kelas(k)}">#${pad(S.unit[k].no)}${hapus ? `<button type="button" data-hapus="${esc(k)}" aria-label="hapus">×</button>` : ''}</span>`).join('')}</div>
     </div>`;
   }).join('');
@@ -850,28 +851,44 @@ function tabHitung() {
   ISI.innerHTML = `
   <section class="card" id="hForm">
     <div class="card-hd"><h2>Hitung stok (audit)</h2></div>
-    <p class="hint">Pilih barang dan gudang, lalu scan semua unit yang ada di rak. Sistem menunjukkan nomor mana yang tidak ditemukan.</p>
-    <div id="hPilih"></div>
+    <p class="hint">Pilih gudang, lalu scan semua unit berlabel yang ada di sana. Sistem menunjukkan nomor mana yang tidak ditemukan.
+      Pilihan barang boleh <b>dikosongkan</b> untuk menghitung <b>semua barang</b>, atau diisi sebagian
+      (mis. nama barang saja) untuk menghitung semua ukuran dan warnanya.</p>
     <div class="row c1"><label class="f">Gudang<select id="hLok">${opsiLokasi(S.lok || 'HO')}</select></label></div>
-    <button class="btn besar" id="hMulai" disabled>Mulai hitung</button>
+    <div id="hPilih"></div>
+    <p class="hint" id="hInfo"></p>
+    <button class="btn besar" id="hMulai">Mulai hitung</button>
   </section>
   <div id="hSesi"></div>
   <section class="card"><div class="card-hd"><h2>Hasil hitung sebelumnya</h2></div><div id="hLog"></div></section>`;
 
-  let bid = null;
-  const p = pemilihBarang($('#hPilih'), { awal: S.hitungBarang, onChange: v => { bid = v; S.hitungBarang = v; $('#hMulai').disabled = !v; } });
-  bid = p.get(); $('#hMulai').disabled = !bid;
-  $('#hMulai').onclick = () => mulai(bid, $('#hLok').value);
+  const p = pemilihBarang($('#hPilih'), { onChange: info });
+  $('#hLok').onchange = info;
+  function info() {
+    const bids = p.kandidat().map(b => b.id), lok = $('#hLok').value, set = new Set(bids);
+    const n = Object.values(S.unit).filter(u => set.has(u.bid) && u.status === 'MASUK' && u.lok === lok).length;
+    const semua = bids.length === S.barang.length;
+    $('#hInfo').innerHTML = `${semua ? '<b>Semua barang</b>' : `<b>${bids.length} jenis barang</b>`} di ${esc(namaLok(lok))}
+      · seharusnya ada <b>${n}</b> unit berlabel.`;
+    $('#hMulai').textContent = semua ? 'Mulai hitung semua barang' : bids.length === 1 ? 'Mulai hitung 1 jenis barang' : `Mulai hitung ${bids.length} jenis barang`;
+  }
+  info();
+  $('#hMulai').onclick = () => mulai(p.kandidat().map(b => b.id), $('#hLok').value, p.label());
 
-  function mulai(bid, lok) {
+  function mulai(bids, lok, label) {
     S.lok = lok; simpan();
-    const b = barangById(bid);
-    const harus = unitDi(bid, lok), ketemu = [], lain = [];
-    const lamaSistem = lamaDi(bid, lok);
+    const set = new Set(bids), satu = bids.length === 1 ? barangById(bids[0]) : null;
+    const semua = bids.length === S.barang.length;
+    const judul = satu ? `${namaBarang(satu)} ${detailBarang(satu)}` : semua ? 'Semua barang' : `${label} (${bids.length} jenis)`;
+    const harus = Object.values(S.unit).filter(u => set.has(u.bid) && u.status === 'MASUK' && u.lok === lok)
+      .sort((x, y) => x.bid.localeCompare(y.bid) || x.no - y.no).map(u => u.k);
+    const perBarang = {}; harus.forEach(k => { const id = S.unit[k].bid; perBarang[id] = (perBarang[id] || 0) + 1; });
+    const ketemu = [], lain = [];
+    const lamaSistem = satu ? lamaDi(satu.id, lok) : null;
     $('#hForm').hidden = true;
     $('#hSesi').innerHTML = `
     <section class="card">
-      <div class="card-hd"><h2>${esc(namaBarang(b))}</h2><span class="sub">${esc(detailBarang(b))} · ${esc(namaLok(lok))}</span>
+      <div class="card-hd"><h2>${esc(judul)}</h2><span class="sub">${esc(namaLok(lok))}</span>
         <div class="kanan"><button class="btn quiet sm" id="hBatal">Batal</button></div></div>
       <div class="ringkas">
         <div><span>Berlabel ditemukan</span><b class="besar-n" id="hN">0</b> <b>/ ${harus.length}</b></div>
@@ -881,16 +898,16 @@ function tabHitung() {
       <label class="cek" style="margin:6px 0"><input type="checkbox" id="hLihat"> Tampilkan nomor yang belum ditemukan</label>
       <div id="hBelum" hidden></div>
       <div id="hLain"></div>
-      <div class="row" style="margin-top:10px">
+      ${satu ? `<div class="row" style="margin-top:10px">
         <label class="f">Barang tanpa label yang dihitung manual<input id="hLama" type="number" min="0" inputmode="numeric" placeholder="jumlah"></label>
-      </div>
+      </div>` : ''}
       <button class="btn ok besar" id="hSelesai">Selesai hitung</button>
     </section>`;
     const gambar = () => {
       $('#hN').textContent = ketemu.length;
-      $('#hKetemu').innerHTML = daftarUnit(ketemu, { kelas: () => 'ok', kosongTeks: 'Belum ada unit yang di-scan.' });
+      $('#hKetemu').innerHTML = daftarUnit(ketemu, { kelas: () => 'ok', kosongTeks: 'Belum ada unit yang di-scan.', target: id => perBarang[id] || 0 });
       const belum = harus.filter(k => !ketemu.includes(k));
-      $('#hBelum').innerHTML = belum.length ? `<div class="chips">${belum.map(k => `<span class="chip">#${pad(S.unit[k].no)}</span>`).join('')}</div>` : '<div class="kosong">Semua sudah ditemukan.</div>';
+      $('#hBelum').innerHTML = belum.length ? daftarUnit(belum) : '<div class="kosong">Semua sudah ditemukan.</div>';
       $('#hLain').innerHTML = lain.length ? `<div class="grup"><div class="grup-hd"><b>Perlu dicek</b></div>${lain.map(x => `<div class="hint">• ${x.pesan}</div>`).join('')}</div>` : '';
     };
     $('#hLihat').onchange = e => { $('#hBelum').hidden = !e.target.checked; };
@@ -899,23 +916,23 @@ function tabHitung() {
       const u = cariUnit(k);
       if (!u) return { jenis: 'bad', pesan: `<span class="mono">${esc(k)}</span> tidak dikenal. Label ini tidak pernah dicetak.` };
       const ub = barangById(u.bid), nm = `${esc(namaBarang(ub))} ${esc(detailBarang(ub))} <b>#${pad(u.no)}</b>`;
-      if (u.bid !== bid) {
+      if (!set.has(u.bid)) {
         if (!lain.some(x => x.k === u.k)) lain.push({ k: u.k, pesan: `${nm} ada di rak, padahal bukan barang yang sedang dihitung.` });
-        gambar(); return { jenis: 'warn', pesan: `Ini ${nm}, bukan ${esc(namaBarang(b))} ${esc(detailBarang(b))}.` };
+        gambar(); return { jenis: 'warn', pesan: `${nm} bukan barang yang sedang dihitung (${esc(judul)}).` };
       }
-      if (ketemu.includes(u.k)) return { jenis: 'warn', pesan: `#${pad(u.no)} sudah dihitung.` };
-      if (harus.includes(u.k)) { ketemu.push(u.k); gambar(); return { jenis: 'ok', pesan: `✓ #${pad(u.no)} · ${ketemu.length} / ${harus.length}` }; }
+      if (ketemu.includes(u.k)) return { jenis: 'warn', pesan: `${nm} sudah dihitung.` };
+      if (harus.includes(u.k)) { ketemu.push(u.k); gambar(); return { jenis: 'ok', pesan: `✓ ${nm} · total ${ketemu.length} / ${harus.length}` }; }
       const alasan = u.status === 'DICETAK' ? 'belum pernah di-scan masuk' : u.status === 'KELUAR' ? 'tercatat sudah keluar' : `tercatat di ${esc(namaLok(u.lok))}`;
       if (!lain.some(x => x.k === u.k)) lain.push({ k: u.k, pesan: `${nm} ada di rak, tapi ${alasan}.` });
       gambar(); return { jenis: 'warn', pesan: `${nm} ${alasan}. Dicatat untuk dicek.` };
     });
     $('#hSelesai').onclick = () => {
       const belum = harus.filter(k => !ketemu.includes(k));
-      const lamaHitung = $('#hLama').value === '' ? null : parseInt($('#hLama').value, 10) || 0;
+      const el = $('#hLama'), lamaHitung = !el || el.value === '' ? null : parseInt(el.value, 10) || 0;
       if (belum.length && !confirm(`${belum.length} unit belum ditemukan. Selesaikan hitung?`)) return;
-      const rec = { id: nid(), t: Date.now(), oleh: oleh(), bid, lok, harus, ketemu: [...ketemu], hilang: belum, lain: lain.map(x => x.pesan), lamaSistem, lamaHitung };
+      const rec = { id: nid(), t: Date.now(), oleh: oleh(), bids, bid: satu ? satu.id : null, judul, lok, harus, ketemu: [...ketemu], hilang: belum, lain: lain.map(x => x.pesan), lamaSistem, lamaHitung };
       S.audit.push(rec); simpan();
-      $('#hSesi').innerHTML = `<section class="card">${hasilAudit(rec)}<div class="dlg-aksi"><button class="btn" id="hLagi">Hitung barang lain</button></div></section>`;
+      $('#hSesi').innerHTML = `<section class="card">${hasilAudit(rec)}<div class="dlg-aksi"><button class="btn" id="hLagi">Hitung lagi</button></div></section>`;
       $('#hLagi').onclick = render;
       scanAktif = null; matikanKamera(); isiLog();
     };
@@ -929,16 +946,31 @@ function tabHitung() {
   isiLog();
 }
 function hasilAudit(a, ringkas) {
-  const b = barangById(a.bid);
+  const bids = a.bids || [a.bid];
+  const satu = bids.length === 1 ? barangById(bids[0]) : null;
   const tanggalMasuk = k => { const r = riwayatTerakhir(S.unit[k], ['MASUK', 'RETUR', 'PINDAH']); return r ? ` <span class="sub">masuk ${tgl(r.t)}</span>` : ''; };
-  const selisihLama = a.lamaHitung === null ? null : a.lamaHitung - a.lamaSistem;
+  const selisihLama = a.lamaHitung == null ? null : a.lamaHitung - a.lamaSistem;
+  // several items: one row per item that had units (expected, found, missing)
+  let tabel = '';
+  if (!satu && !ringkas) {
+    const hitungPer = list => list.reduce((m, k) => { const id = S.unit[k].bid; m[id] = (m[id] || 0) + 1; return m; }, {});
+    const h = hitungPer(a.harus), k = hitungPer(a.ketemu), x = hitungPer(a.hilang);
+    const ids = Object.keys(h).sort((p, q) => namaBarang(barangById(p)).localeCompare(namaBarang(barangById(q))) || detailBarang(barangById(p)).localeCompare(detailBarang(barangById(q)), 'id', { numeric: true }));
+    tabel = ids.length ? `<div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Barang</th><th class="n">Seharusnya</th><th class="n">Ditemukan</th><th class="n">Tidak ditemukan</th></tr></thead><tbody>
+      ${ids.map(id => { const b = barangById(id); return `<tr><td>${esc(namaBarang(b))}<span class="sub">${esc(detailBarang(b))}</span></td><td class="n">${h[id]}</td><td class="n">${k[id] || 0}</td>
+        <td class="n">${x[id] ? `<b style="color:var(--stamp)">${x[id]}</b>` : '✓'}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+  }
+  const judul = satu ? `${esc(namaBarang(satu))} <span class="sub" style="display:inline">${esc(detailBarang(satu))} · ${esc(namaLok(a.lok))}</span>`
+    : `${esc(a.judul || 'Beberapa barang')} <span class="sub" style="display:inline">${bids.length} jenis · ${esc(namaLok(a.lok))}</span>`;
   return `
     <div class="ent-hd"><span class="badge b-HITUNG">HITUNG</span><time>${tglJam(a.t)}</time><span>${esc(a.oleh)}</span></div>
-    <h3 style="margin-top:4px">${esc(namaBarang(b))} <span class="sub" style="display:inline">${esc(detailBarang(b))} · ${esc(namaLok(a.lok))}</span></h3>
+    <h3 style="margin-top:4px">${judul}</h3>
     <p style="margin:4px 0">Berlabel: seharusnya <b>${a.harus.length}</b>, ditemukan <b>${a.ketemu.length}</b>.
       ${a.hilang.length ? `<b style="color:var(--stamp)">Tidak ditemukan: ${a.hilang.length}</b>` : '<b style="color:var(--tally)">Lengkap.</b>'}</p>
-    ${a.hilang.length ? `<div class="chips">${a.hilang.map(k => `<span class="chip bad">#${pad(S.unit[k].no)}${ringkas ? '' : tanggalMasuk(k)}</span>`).join('')}</div>` : ''}
-    ${a.lamaHitung !== null ? `<p style="margin:6px 0 0">Tanpa label: sistem <b>${a.lamaSistem}</b>, dihitung <b>${a.lamaHitung}</b>
+    ${a.hilang.length ? (satu ? `<div class="chips">${a.hilang.map(k => `<span class="chip bad">#${pad(S.unit[k].no)}${ringkas ? '' : tanggalMasuk(k)}</span>`).join('')}</div>`
+      : daftarUnit(a.hilang, { kelas: () => 'bad' })) : ''}
+    ${tabel}
+    ${a.lamaHitung != null ? `<p style="margin:6px 0 0">Tanpa label: sistem <b>${a.lamaSistem}</b>, dihitung <b>${a.lamaHitung}</b>
       ${selisihLama ? `<b style="color:var(--stamp)">(selisih ${selisihLama > 0 ? '+' : ''}${selisihLama})</b>` : '(cocok)'}</p>` : ''}
     ${a.lain.length ? `<div style="margin-top:6px">${a.lain.map(x => `<div class="hint">• ${x}</div>`).join('')}</div>` : ''}
     ${ringkas ? '' : '<p class="hint">Di aplikasi asli, selisih diperbaiki lewat koreksi oleh master, dan catatan hitung ini tetap tersimpan.</p>'}`;
@@ -1089,7 +1121,19 @@ function eksporExcel(filter) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(baris, { dateNF: 'dd/mm/yyyy hh:mm' }), 'Riwayat');
   if (!filter || filter === 'HITUNG') {
-    const audit = S.audit.map(a => { const b = barangById(a.bid); return { Tanggal: new Date(a.t), ...isiBarang(b), Gudang: namaLok(a.lok), Seharusnya: a.harus.length, Ditemukan: a.ketemu.length, 'Tidak ditemukan': a.hilang.map(k => '#' + pad(S.unit[k].no)).join(', '), 'Tanpa label (sistem)': a.lamaSistem, 'Tanpa label (dihitung)': a.lamaHitung ?? '', Oleh: a.oleh }; });
+    // one row per item per count session (a whole-warehouse count spans many items)
+    const audit = S.audit.flatMap(a => {
+      const satu = (a.bids || [a.bid]).length === 1;
+      const ids = [...new Set(a.harus.map(k => S.unit[k].bid))];
+      if (satu && !ids.length) ids.push(a.bid || a.bids[0]);
+      const dari = (list, id) => list.filter(k => S.unit[k].bid === id);
+      return ids.map(id => ({
+        Tanggal: new Date(a.t), Hitung: a.judul || '', ...isiBarang(barangById(id)), Gudang: namaLok(a.lok),
+        Seharusnya: dari(a.harus, id).length, Ditemukan: dari(a.ketemu, id).length,
+        'Tidak ditemukan': dari(a.hilang, id).map(k => '#' + pad(S.unit[k].no)).join(', '),
+        'Tanpa label (sistem)': satu ? a.lamaSistem ?? '' : '', 'Tanpa label (dihitung)': satu ? a.lamaHitung ?? '' : '', Oleh: a.oleh,
+      }));
+    });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(audit, { dateNF: 'dd/mm/yyyy hh:mm' }), 'Hitung');
   }
   const nama = `demo-barcode-riwayat${filter ? '-' + filter.toLowerCase() : ''}.xlsx`;
