@@ -362,8 +362,6 @@ function tabLabel() {
       <div class="card-hd"><h2>Contoh label</h2><span class="sub" id="lUkuran"></span></div>
       <div class="pratinjau" id="lPrev"><div class="kosong">Pilih barang untuk melihat contoh.</div></div>
       <p class="hint">Barcode garis untuk scanner kasir, QR untuk kamera HP. Isinya sama.</p>
-      <label class="f" style="max-width:260px">Lihat contoh nomor lain (tidak dicetak)
-        <input id="lContohNo" type="number" min="1" max="9999999" placeholder="mis. 10000" inputmode="numeric"></label>
     </section>
   </div>
   <section class="card">
@@ -427,8 +425,7 @@ function tabLabel() {
       · Berikutnya: <b>#${pad(akhir + antri + 1)} – #${pad(akhir + antri + n)}</b>
       ${master && dicetak[bid] ? `<br>Dicetak tapi belum di-scan masuk: <b>${dicetak[bid]} unit</b>` : ''}`;
     $('#lTambah').textContent = `+ Tambah ${n} ke daftar`;
-    const lihat = parseInt($('#lContohNo').value, 10);
-    const no = lihat > 0 ? lihat : akhir + antri + 1;
+    const no = akhir + antri + 1;
     tampilPratinjau($('#lPrev'), { k: kodeUnit(b, no), bid, no }, f, garis.checked);
   }
 
@@ -455,7 +452,6 @@ function tabLabel() {
 
   fmt.onchange = () => { S.format = fmt.value; garis.checked = !!formatDari(fmt.value).garis; simpan(); segarkan(); gambarAntri(); };
   jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
-  $('#lContohNo').oninput = segarkan;
   /* roll settings */
   const isian = { w: $('#lRollW'), h: $('#lRollH'), kol: $('#lKol'), jarak: $('#lJarak'), gx: $('#lGx'), gy: $('#lGy') };
   const BATAS = { w: [15, 104], h: [10, 150], kol: [1, 3], jarak: [0, 10], gx: [-10, 10], gy: [-10, 10] };
