@@ -25,9 +25,9 @@ const FORMAT = {
 };
 
 /* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
-// Default = roll currently in the GT820: 33×15 mm stickers, 3 per row, ~2 mm apart.
-// Gap measured from the first real print (2026-11-24): columns drifted ~0.65 mm each at 2 mm → ~2.6 mm.
-const UKURAN_ROLL = { w: 33, h: 15, kol: 3, jarak: 2.6, gx: 0, gy: 0 };
+// Default = roll in the GT820 since 2026-11-25: 70×50 mm stickers, 1 per row.
+// (The earlier 33×15 mm roll, 3 per row, had a measured column gap of 2.6 mm.)
+const UKURAN_ROLL = { w: 70, h: 50, kol: 1, jarak: 0, gx: 0, gy: 0 };
 function formatDari(key) {
   const f = FORMAT[key] || FORMAT.roll;
   if (!f.roll) return f;
@@ -671,7 +671,12 @@ function zplLabel(codes) {
       const mag = Math.max(2, Math.min(10, Math.floor(mm(qrMm) / modul))), qrDots = mag * modul;
       let yAtas = y;
       if (pakaiBc) {
-        z += `^FO${x},${y}^BY2,3,${mm(bcH)}^BCN,${mm(bcH)},N,N,N,A^FD${bersih(k)}^FS`;
+        // Code 128: 11 modules per symbol. Widest whole-dot bars that still leave a 10-module quiet zone, centred.
+        const angka = (/d+$/.exec(k) || [''])[0].length, simbol = 3 + (k.length - angka) + Math.ceil(angka / 2) + 1;
+        const modulBc = simbol * 11 + 2, lebarStiker = mm(w);
+        const bar = Math.max(1, Math.min(4, Math.floor(lebarStiker / (modulBc + 20))));
+        const xBc = mm(kiri0 + c * (w + jarak)) + Math.max(0, Math.round((lebarStiker - modulBc * bar) / 2));
+        z += `^FO${xBc},${y}^BY${bar},3,${mm(bcH)}^BCN,${mm(bcH)},N,N,N,A^FD${bersih(k)}^FS`;
         yAtas = y + mm(bcH + 1);
       }
       z += `^FO${x},${yAtas}^BQN,2,${mag}^FDMA,${bersih(k)}^FS`;
@@ -1252,8 +1257,8 @@ function render() {
 if (APK) $('#lnkApk').hidden = true;   // already in the app
 
 S = muat();
-// PCs that saved the first-guess 2 mm gap for the 33×15 roll get the measured 2.6 mm once.
-if (S && S.roll && S.roll.w === 33 && S.roll.h === 15 && S.roll.jarak === 2 && !S.jarakDiukur) { S.roll.jarak = 2.6; S.jarakDiukur = true; simpan(); }
+// New roll on 2026-11-25 (70×50, 1 per row): replace the old 33×15 setting saved in this browser, once.
+if (S && S.roll && S.roll.w === 33 && S.roll.h === 15 && !S.roll70x50) { S.roll = { ...UKURAN_ROLL }; S.roll70x50 = true; simpan(); }
 if (HP) {
   // Phones start with no labelled stock: only what is actually scanned there. One-time reset for
   // phones that still hold the sample data from earlier versions.
