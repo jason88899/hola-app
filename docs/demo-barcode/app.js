@@ -52,15 +52,24 @@ const SEED = [
   ['LEGEND', ['160', '180'], ['COKLAT']],
   ['MEDALION PILLO9', ['120', '160', '180'], ['BIRU', 'COKLAT', 'MERAH']],
 ];
-const WARNA_SINGKAT = { ABU: 'AB', COKLAT: 'CK', BIRU: 'BR', MERAH: 'MR', PUTIH: 'PT' };
-const singkatTipe = t => { const w = t.split(/\s+/).filter(Boolean); return w.length === 1 ? w[0].slice(0, 3) : w.map(x => x[0]).join(''); };
+// Short codes, same rule as HOLA migration-037 (2026-11-26, "versi D"): merek 1 + nama 2 + ukuran ≤3 + warna 1,
+// at most 7 characters, so the whole unit code (e.g. CDP180C-0001) gets 3-dot bars on a 70 mm sticker.
+function kodePendek(merek, tipe, ukuran, warna, pakai) {
+  const huruf = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const w = String(tipe || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const t = !w.length ? '' : w.length === 1 ? w[0].slice(0, 2) : w.map(x => x[0]).join('').slice(0, 2);
+  const c = huruf(warna);
+  let dasar = huruf(merek).slice(0, 1) + t + huruf(ukuran).slice(0, 3);
+  if (dasar.length + 1 < 3) dasar = dasar.padEnd(2, 'X');
+  for (let i = 0; i < Math.max(c.length, 1); i++) { const k = dasar + c.charAt(i); if (k.length >= 3 && !pakai.has(k)) return k; }
+  for (let i = 2; i < 1000; i++) { const k = dasar.slice(0, 7 - String(i).length) + i; if (!pakai.has(k)) return k; }
+  return null;
+}
 
 function buatBarang() {
   const daftar = [], pakai = new Set();
   SEED.forEach(([tipe, ukur, warna]) => ukur.forEach(u => warna.forEach(w => {
-    const dasar = 'CO' + singkatTipe(tipe) + u + (WARNA_SINGKAT[w] || w.slice(0, 2));
-    let k = dasar, i = 2;
-    while (pakai.has(k)) k = dasar + i++;
+    const k = kodePendek('COLORADO', tipe, u, w, pakai);
     pakai.add(k);
     daftar.push({ id: 'b' + (daftar.length + 1), kode: k, kategori: 'MATRAS', merek: 'COLORADO', tipe, ukuran: u, warna: w, kunci: false });
   })));
@@ -82,7 +91,7 @@ function kosong() {
 function contoh() {
   S = kosong();
   const H = 864e5, t0 = Date.now() - 6 * H;
-  const ck = S.barang.find(b => b.kode === 'CODP180CK'), ab = S.barang.find(b => b.kode === 'CODP180AB');
+  const ck = S.barang.find(b => b.kode === 'CDP180C'), ab = S.barang.find(b => b.kode === 'CDP180A');
   S.lama[ck.id + '|HO'] = 4; S.lama[ck.id + '|GDG-01'] = 2;
   S.lama[ab.id + '|HO'] = 0; S.lama[ab.id + '|GDG-01'] = 0;
   const c1 = cetakBaru(ck.id, 12, 'Admin Label', t0);
@@ -619,16 +628,17 @@ function elLabel(u, f, garis) {
   const b = barangById(u.bid);
   const w = f.a4 ? f.w : f.isi, h = f.h;
   if (f.roll && muatBarcode(w, h)) {
-    // Barcode only (2026-11-26): half the label tall, text centred underneath. Same layout as zplLabel.
+    // Layout "D" (2026-11-26): barcode two thirds of the label tall, then one small line
+    // (name · size · colour) and the code. Same layout as zplLabel.
     const s = h / 50, el = document.createElement('div');
     el.className = 'lbl lbl-bc' + (garis ? ' garis' : '');
-    el.style.cssText = `width:${w}mm;height:${h}mm;padding:3mm 2.5mm 2mm;text-align:center`;
+    el.style.cssText = `width:${w}mm;height:${h}mm;padding:2mm 2.5mm 1mm;text-align:center`;
+    const nama = [`${b.merek} ${b.tipe}`, detailBarang(b)].filter(Boolean).join(' · ');
     el.innerHTML = `
-      <div class="bc" style="height:${(h * .5).toFixed(1)}mm;margin:0 auto">${svgBarcode(u.k)}</div>
-      <div class="teks" style="margin-top:${(2 * s).toFixed(1)}mm;align-items:center">
-        <span class="nama" style="font-size:${(13 * s).toFixed(1)}pt">${esc(b.merek)} ${esc(b.tipe)}</span>
-        <span style="font-size:${(13 * s).toFixed(1)}pt;font-weight:700">${esc(detailBarang(b))}</span>
-        <span class="kode" style="font-size:${(11 * s).toFixed(1)}pt">${esc(u.k)}</span>
+      <div class="bc" style="height:${(h * .66).toFixed(1)}mm;margin:0 auto">${svgBarcode(u.k)}</div>
+      <div class="teks" style="margin-top:${(2.5 * s).toFixed(1)}mm;align-items:center">
+        <span class="nama" style="font-size:${(8 * s).toFixed(1)}pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(nama)}</span>
+        <span class="kode" style="font-size:${(11 * s).toFixed(1)}pt;margin-top:${(.8 * s).toFixed(1)}mm">${esc(u.k)}</span>
       </div>`;
     return el;
   }
@@ -704,18 +714,19 @@ function zplLabel(codes) {
         const modulBc = simbol * 11 + 2;
         const bar = Math.max(1, Math.min(4, Math.floor(lebarStiker / (modulBc + 20))));
         const xBc = x0 + Math.max(0, Math.round((lebarStiker - modulBc * bar) / 2));
-        const yBc = mm(gy + 3), tinggiBc = mm(h * .5);
+        const yBc = mm(gy + 2), tinggiBc = mm(h * .66);     // layout "D"
         z += `^FO${xBc},${yBc}^BY${bar},3,${tinggiBc}^BCN,${tinggiBc},N,N,N,A^FD${bersih(k)}^FS`;
-        const lebarTeks = lebarStiker - mm(5), fh = Math.round(40 * h / 50), fk = Math.round(34 * h / 50);
+        const lebarTeks = lebarStiker - mm(5), fh = Math.round(30 * h / 50), fk = Math.round(34 * h / 50);
         const tengah = (s, t) => {        // centred line; squeeze width so it stays on one line
           s = bersih(s);
           let fw = Math.min(Math.round(t * .85), Math.floor(lebarTeks / (Math.max(1, s.length) * .62)));
           if (fw < 12) { fw = 12; s = s.slice(0, Math.max(4, Math.floor(lebarTeks / (fw * .62)))); }
           return `^A0N,${t},${fw}^FB${lebarTeks},1,0,C^FD${s}^FS`;
         };
-        let ty = yBc + tinggiBc + mm(2);
-        [[`${b.merek} ${b.tipe}`, fh], [detailBarang(b), fh], [k, fk]].forEach(([s, t]) => {
-          z += `^FO${x0 + mm(2.5)},${ty}` + tengah(s, t); ty += t + 6;
+        let ty = yBc + tinggiBc + mm(2.5);
+        const nama = [`${b.merek} ${b.tipe}`, detailBarang(b)].filter(Boolean).join(' · ');
+        [[nama, fh], [k, fk]].forEach(([s, t]) => {
+          z += `^FO${x0 + mm(2.5)},${ty}` + tengah(s, t); ty += t + 10;
         });
         return;
       }
@@ -1303,6 +1314,12 @@ S = muat();
 if (S && S.roll && S.roll.w === 33 && S.roll.h === 15 && !S.roll70x50) { S.roll = { ...UKURAN_ROLL }; S.roll70x50 = true; simpan(); }
 // The 70x50 test print sat ~2 mm left: give browsers that saved 0 the measured shift, once.
 if (S && S.roll && S.roll.w === 70 && S.roll.h === 50 && !S.roll.gx && !S.geser2mm) { S.roll.gx = 2; S.geser2mm = true; simpan(); }
+// Short codes (versi D, 2026-11-26): items never printed in this browser get the new code, once.
+if (S && Array.isArray(S.barang) && !S.kodeD) {
+  const pakai = new Set(S.barang.filter(b => b.kunci).map(b => b.kode));
+  S.barang.forEach(b => { if (!b.kunci) { b.kode = kodePendek(b.merek, b.tipe, b.ukuran, b.warna, pakai); pakai.add(b.kode); } });
+  S.kodeD = true; simpan();
+}
 if (HP) {
   // Phones start with no labelled stock: only what is actually scanned there. One-time reset for
   // phones that still hold the sample data from earlier versions.
