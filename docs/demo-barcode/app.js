@@ -19,9 +19,11 @@ const PERAN = {
 };
 const TAB = { label: 'Label', masuk: 'Masuk', keluar: 'Keluar', pindah: 'Pindah', hitung: 'Hitung', stok: 'Stok', cari: 'Cari unit', riwayat: 'Riwayat', barang: 'Barang' };
 
-/* Label format: only the Zebra GT820 label roll (one label per sticker, size set to match the roll). */
+/* Label printers. 'win' = any printer with a Windows driver (Honeywell PC42t since 2026-11-26), printed
+   through the browser's print window, one sticker per page. 'roll' = Zebra GT820, raw ZPL via HOLA Zebra. */
 const FORMAT = {
-  'roll': { nama: 'Zebra GT820 · label roll', nota: true, roll: true },
+  'win': { nama: 'Honeywell / printer Windows', nota: true, roll: true, win: true },
+  'roll': { nama: 'Zebra GT820', nota: true, roll: true },
 };
 
 /* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
@@ -32,7 +34,8 @@ function formatDari(key) {
   const f = FORMAT[key] || FORMAT.roll;
   if (!f.roll) return f;
   const r = { ...UKURAN_ROLL, ...(S && S.roll) };
-  return { ...f, ...r, isi: r.w };
+  // through a driver there is one sticker per page, so columns and shifts do not apply
+  return f.win ? { ...f, w: r.w, h: r.h, kol: 1, jarak: 0, gx: 0, gy: 0, isi: r.w } : { ...f, ...r, isi: r.w };
 }
 
 /* ---------- demo item master (spring bed COLORADO, kategori MATRAS) ---------- */
@@ -370,23 +373,20 @@ function tabLabel() {
     <div class="tbl-wrap" id="lAntri"></div>
     <p class="hint" id="lZebra" style="font-weight:700">Memeriksa printer Zebra…</p>
     <div class="row c3" style="margin-top:8px">
-      <label class="f">Printer<input value="Zebra GT820 · label roll" readonly tabindex="-1">
-        <select id="lFormat" hidden><option value="roll" selected>roll</option></select></label>
+      <label class="f">Printer<select id="lFormat">${Object.entries(FORMAT).map(([k, f]) => `<option value="${k}" ${k === (FORMAT[S.format] ? S.format : 'win') ? 'selected' : ''}>${esc(f.nama)}</option>`).join('')}</select></label>
       <label class="f" id="lRollWrap">Ukuran 1 stiker (lebar × tinggi, mm)
         <span style="display:flex;gap:6px;align-items:center"><input id="lRollW" type="number" min="15" max="104" step="0.5" inputmode="decimal"> ×
         <input id="lRollH" type="number" min="10" max="150" step="0.5" inputmode="decimal"></span></label>
-      <label class="f">Stiker per baris<select id="lKol"><option>1</option><option>2</option><option>3</option></select></label>
-      <label class="f">Jarak antar stiker (mm)<input id="lJarak" type="number" min="0" max="10" step="0.1" inputmode="decimal"></label>
-      <label class="f">Geser kanan × bawah (mm)
+      <label class="f" id="lKolWrap">Stiker per baris<select id="lKol"><option>1</option><option>2</option><option>3</option></select></label>
+      <label class="f" id="lJarakWrap">Jarak antar stiker (mm)<input id="lJarak" type="number" min="0" max="10" step="0.1" inputmode="decimal"></label>
+      <label class="f" id="lGeserWrap">Geser kanan × bawah (mm)
         <span style="display:flex;gap:6px;align-items:center"><input id="lGx" type="number" min="-10" max="10" step="0.1" inputmode="decimal"> ×
         <input id="lGy" type="number" min="-10" max="10" step="0.1" inputmode="decimal"></span></label>
       <label class="f" id="lPosWrap" hidden><input id="lPos" type="number" value="1"></label>
       <label class="cek" hidden><input type="checkbox" id="lGaris"> Garis potong</label>
     </div>
     <button class="btn besar" id="lCetak" disabled>Cetak</button>
-    <p class="hint">Label langsung dikirim ke Zebra, tanpa jendela print. Nomor tercatat saat menekan Cetak;
-    kalau ada yang gagal tercetak, cetak ulang dengan nomor yang sama di bawah.
-    Kalau posisi cetakan meleset, atur "Geser" lalu coba cetak 1 label.</p>
+    <p class="hint" id="lHintCetak"></p>
   </section>
   <section class="card">
     <div class="card-hd"><h2>Cetak ulang label rusak</h2></div>
@@ -434,6 +434,10 @@ function tabLabel() {
     const f = formatDari(fmt.value);
     $('#lPosWrap').hidden = !f.a4;
     $('#lRollWrap').hidden = !f.roll;
+    ['#lKolWrap', '#lJarakWrap', '#lGeserWrap'].forEach(s => { $(s).hidden = !!f.win; });
+    $('#lHintCetak').innerHTML = f.win
+      ? 'Jendela print akan terbuka: pilih printer <b>Honeywell PC42t (203 dpi) - DP</b>, ukuran kertas <b>70 × 50 mm</b>, Margins <b>None</b>, Scale <b>100%</b>. Nomor tercatat saat menekan Cetak; kalau ada yang gagal tercetak, cetak ulang dengan nomor yang sama di bawah.'
+      : 'Label langsung dikirim ke Zebra, tanpa jendela print. Nomor tercatat saat menekan Cetak; kalau ada yang gagal tercetak, cetak ulang dengan nomor yang sama di bawah. Kalau posisi cetakan meleset, atur "Geser" lalu coba cetak 1 label.';
     const total = S.antri.reduce((a, x) => a + x.n, 0);
     $('#lAntri').innerHTML = S.antri.length ? `<table><thead><tr><th>Barang</th><th class="n">Jumlah</th><th>Nomor</th><th></th></tr></thead><tbody>${S.antri.map((x, i) => {
       const b = barangById(x.bid), mulai = (S.nomor[x.bid] || 0) + 1;
@@ -450,7 +454,7 @@ function tabLabel() {
     $('#lKosong').hidden = !total;
   }
 
-  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!formatDari(fmt.value).garis; simpan(); segarkan(); gambarAntri(); };
+  fmt.onchange = () => { S.format = fmt.value; garis.checked = !!formatDari(fmt.value).garis; simpan(); segarkan(); gambarAntri(); periksaPrinter(); };
   jml.oninput = segarkan; garis.onchange = segarkan; pos.oninput = gambarAntri;
   /* roll settings */
   const isian = { w: $('#lRollW'), h: $('#lRollH'), kol: $('#lKol'), jarak: $('#lJarak'), gx: $('#lGx'), gy: $('#lGy') };
@@ -477,9 +481,23 @@ function tabLabel() {
       : `✗ ${esc(st.pesan)} <button class="btn quiet sm" type="button" id="lZebraCek">Cek lagi</button>`;
     const b = $('#lZebraCek'); if (b) b.onclick = () => cekZebra().then(tulisStatus);
   };
-  cekZebra().then(tulisStatus);
-  /* checks the printer, then runs ambilKode() (which records the numbers) and sends them */
+  // The Windows-printer route never talks to the printer itself: the driver does, from the print window.
+  function periksaPrinter() {
+    if (!fmt.isConnected) return;
+    if (formatDari(fmt.value).win) {
+      const el = $('#lZebra'); el.style.color = 'var(--muted)';
+      el.textContent = 'Dicetak lewat jendela print Windows (driver printer).';
+    } else cekZebra().then(tulisStatus);
+  }
+  periksaPrinter();
+  /* records the numbers (ambilKode) and prints them: print window for 'win', HOLA Zebra for 'roll' */
   async function cetakKeZebra(ambilKode, judul) {
+    if (formatDari(fmt.value).win) {
+      const codes = ambilKode(); if (!codes) return false;
+      cetakKeKertas(codes, fmt.value, 1, false);
+      toast(`${codes.length} label ${judul} — pilih printer Honeywell di jendela print`);
+      return true;
+    }
     const st = await cekZebra(); tulisStatus(st);
     if (!st.ok || st.siap === false) { alert('Printer belum siap: ' + st.pesan); return false; }
     const codes = ambilKode(); if (!codes) return false;
