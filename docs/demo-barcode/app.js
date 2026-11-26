@@ -29,7 +29,7 @@ const FORMAT = {
 /* Label-roll printers (Zebra etc.): page = one sticker, size set by the user to match the roll. */
 // Default = roll in the GT820 since 2026-11-25: 70×50 mm stickers, 1 per row.
 // (The earlier 33×15 mm roll, 3 per row, had a measured column gap of 2.6 mm.)
-const UKURAN_ROLL = { w: 70, h: 50, kol: 1, jarak: 0, gx: 0, gy: 0 };
+const UKURAN_ROLL = { w: 70, h: 50, kol: 1, jarak: 0, gx: 2, gy: 0 };
 function formatDari(key) {
   const f = FORMAT[key] || FORMAT.roll;
   if (!f.roll) return f;
@@ -618,6 +618,20 @@ const muatBarcode = (w, h) => w >= 50 && h >= 28;
 function elLabel(u, f, garis) {
   const b = barangById(u.bid);
   const w = f.a4 ? f.w : f.isi, h = f.h;
+  if (f.roll && muatBarcode(w, h)) {
+    // Barcode only (2026-11-26): half the label tall, text centred underneath. Same layout as zplLabel.
+    const s = h / 50, el = document.createElement('div');
+    el.className = 'lbl lbl-bc' + (garis ? ' garis' : '');
+    el.style.cssText = `width:${w}mm;height:${h}mm;padding:3mm 2.5mm 2mm;text-align:center`;
+    el.innerHTML = `
+      <div class="bc" style="height:${(h * .5).toFixed(1)}mm;margin:0 auto">${svgBarcode(u.k)}</div>
+      <div class="teks" style="margin-top:${(2 * s).toFixed(1)}mm;align-items:center">
+        <span class="nama" style="font-size:${(13 * s).toFixed(1)}pt">${esc(b.merek)} ${esc(b.tipe)}</span>
+        <span style="font-size:${(13 * s).toFixed(1)}pt;font-weight:700">${esc(detailBarang(b))}</span>
+        <span class="kode" style="font-size:${(11 * s).toFixed(1)}pt">${esc(u.k)}</span>
+      </div>`;
+    return el;
+  }
   const pakaiBc = !f.roll || muatBarcode(w, h);
   const s = h / 37, pd = Math.max(1, h * .06), bcH = pakaiBc ? h * .27 : 0, sela = pakaiBc ? h * .035 : 0;
   const qr = Math.min(h - bcH - pd * 2 - sela, w * .42);
@@ -672,8 +686,7 @@ function zplLabel(codes) {
   const bersih = s => String(s).replace(/[\^~]/g, ' ');
   const pd = h >= 20 ? 1.5 : 1, pdV = h >= 20 ? 1.5 : .75;   // small stickers: tighter top/bottom so the QR can grow
   const pakaiBc = muatBarcode(w, h);
-  const bcH = pakaiBc ? h * .27 : 0;
-  const qrMm = Math.min(h - 2 * pdV - (pakaiBc ? bcH + 1 : 0), w * .42);
+  const qrMm = Math.min(h - 2 * pdV, w * .42);
   const baris = [];
   for (let i = 0; i < codes.length; i += kol) {
     let z = `^XA^CI28^PW832^LL${mm(h)}^LH0,0^PR3`;
@@ -683,16 +696,31 @@ function zplLabel(codes) {
       // QR version 1 (21 modules) holds up to 20 characters at error level M; longer codes need version 2 (25)
       const modul = k.length <= 20 ? 21 : 25;
       const mag = Math.max(2, Math.min(10, Math.floor(mm(qrMm) / modul))), qrDots = mag * modul;
-      let yAtas = y;
       if (pakaiBc) {
-        // Code 128: 11 modules per symbol. Widest whole-dot bars that still leave a 10-module quiet zone, centred.
-        const angka = (/d+$/.exec(k) || [''])[0].length, simbol = 3 + (k.length - angka) + Math.ceil(angka / 2) + 1;
-        const modulBc = simbol * 11 + 2, lebarStiker = mm(w);
+        // Barcode only: as wide as the sticker allows (whole-dot bars, 10-module quiet zone each side), half the label tall,
+        // text centred underneath. Code 128 ≈ 11 modules per symbol; trailing digits pack two per symbol (set C).
+        const x0 = mm(kiri0 + c * (w + jarak)), lebarStiker = mm(w);
+        const angka = (/\d+$/.exec(k) || [''])[0].length, simbol = 3 + (k.length - angka) + Math.ceil(angka / 2) + 1;
+        const modulBc = simbol * 11 + 2;
         const bar = Math.max(1, Math.min(4, Math.floor(lebarStiker / (modulBc + 20))));
-        const xBc = mm(kiri0 + c * (w + jarak)) + Math.max(0, Math.round((lebarStiker - modulBc * bar) / 2));
-        z += `^FO${xBc},${y}^BY${bar},3,${mm(bcH)}^BCN,${mm(bcH)},N,N,N,A^FD${bersih(k)}^FS`;
-        yAtas = y + mm(bcH + 1);
+        const xBc = x0 + Math.max(0, Math.round((lebarStiker - modulBc * bar) / 2));
+        const yBc = mm(gy + 3), tinggiBc = mm(h * .5);
+        z += `^FO${xBc},${yBc}^BY${bar},3,${tinggiBc}^BCN,${tinggiBc},N,N,N,A^FD${bersih(k)}^FS`;
+        const lebarTeks = lebarStiker - mm(5), fh = Math.round(40 * h / 50), fk = Math.round(34 * h / 50);
+        const tengah = (s, t) => {        // centred line; squeeze width so it stays on one line
+          s = bersih(s);
+          let fw = Math.min(Math.round(t * .85), Math.floor(lebarTeks / (Math.max(1, s.length) * .62)));
+          if (fw < 12) { fw = 12; s = s.slice(0, Math.max(4, Math.floor(lebarTeks / (fw * .62)))); }
+          return `^A0N,${t},${fw}^FB${lebarTeks},1,0,C^FD${s}^FS`;
+        };
+        let ty = yBc + tinggiBc + mm(2);
+        [[`${b.merek} ${b.tipe}`, fh], [detailBarang(b), fh], [k, fk]].forEach(([s, t]) => {
+          z += `^FO${x0 + mm(2.5)},${ty}` + tengah(s, t); ty += t + 6;
+        });
+        return;
       }
+      let yAtas = y;
+      // small stickers (no room for readable bars): QR + text
       z += `^FO${x},${yAtas}^BQN,2,${mag}^FDMA,${bersih(k)}^FS`;
       const tx = x + qrDots + mm(1), tw = mm(kiri0 + c * (w + jarak) + w - pd) - tx;
       const tinggiTeks = mm(h - pd) - yAtas;
@@ -1273,6 +1301,8 @@ if (APK) $('#lnkApk').hidden = true;   // already in the app
 S = muat();
 // New roll on 2026-11-25 (70×50, 1 per row): replace the old 33×15 setting saved in this browser, once.
 if (S && S.roll && S.roll.w === 33 && S.roll.h === 15 && !S.roll70x50) { S.roll = { ...UKURAN_ROLL }; S.roll70x50 = true; simpan(); }
+// The 70x50 test print sat ~2 mm left: give browsers that saved 0 the measured shift, once.
+if (S && S.roll && S.roll.w === 70 && S.roll.h === 50 && !S.roll.gx && !S.geser2mm) { S.roll.gx = 2; S.geser2mm = true; simpan(); }
 if (HP) {
   // Phones start with no labelled stock: only what is actually scanned there. One-time reset for
   // phones that still hold the sample data from earlier versions.
